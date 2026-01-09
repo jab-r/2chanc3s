@@ -1,0 +1,8 @@
+name = "2chanc3s-api-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-12-01"
+
+[vars]
+# Set this to your Cloud Run origin host (no path)
+# Deployed service URL: https://chanc3s-api-696735170560.us-central1.run.app
+CLOUD_RUN_ORIGIN = "chanc3s-api-696735170560.us-central1.run.app"
