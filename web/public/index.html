@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>2chanc3s — missed connections</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <h1>2chanc3s</h1>
+      <div class="tag">missed connections (nearby)</div>
+    </header>
+
+    <main class="wrap">
+      <section class="panel">
+        <div class="row">
+          <button id="btnLocate">Use my location</button>
+          <label class="inline">
+            radius
+            <select id="k">
+              <option value="0">k=0</option>
+              <option value="1" selected>k=1</option>
+              <option value="2">k=2</option>
+            </select>
+          </label>
+          <label class="inline">
+            limit
+            <select id="limit">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row">
+          <input id="search" type="search" placeholder="search nearby posts…" />
+          <button id="btnSearch">Search</button>
+          <button id="btnClear">Clear</button>
+        </div>
+
+        <div id="status" class="status"></div>
+      </section>
+
+      <section id="list" class="list"></section>
+    </main>
+
+    <footer class="foot">
+      <div>
+        Reply requires the Loxation app.
+        <a href="https://apps.apple.com/app/id6743818003">iOS</a>
+        ·
+        <a href="https://play.google.com/store/apps/details?id=com.jabresearch.loxation">Android</a>
+      </div>
+    </footer>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
+

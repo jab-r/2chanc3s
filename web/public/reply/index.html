@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Reply in Loxation</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <h1>Reply</h1>
+      <div class="tag">private reply happens in the app</div>
+    </header>
+
+    <main class="wrap">
+      <section class="panel">
+        <div id="target" class="mono"></div>
+        <div class="row">
+          <a id="btnOpen" class="btn" href="#">Open in app</a>
+          <a id="btnIos" class="btn" href="https://apps.apple.com/app/id6743818003">Install (iOS)</a>
+          <a id="btnAndroid" class="btn" href="https://play.google.com/store/apps/details?id=com.jabresearch.loxation">Install (Android)</a>
+        </div>
+        <p class="small">
+          If the app is installed and Universal/App Links are configured, “Open in app” should open Loxation directly.
+        </p>
+      </section>
+    </main>
+
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      const username = (params.get('username') || '').trim();
+      const messageId = (params.get('messageId') || '').trim();
+
+      const target = document.getElementById('target');
+      target.textContent = `@${username}  —  messageId: ${messageId}`;
+
+      // Re-attempt the same https deep link.
+      const btnOpen = document.getElementById('btnOpen');
+      btnOpen.href = location.href;
+
+      // Basic platform hint: if on iOS hide Android and vice-versa.
+      const ua = navigator.userAgent || '';
+      const isAndroid = /Android/i.test(ua);
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+      if (isAndroid && !isIOS) document.getElementById('btnIos').style.display = 'none';
+      if (isIOS && !isAndroid) document.getElementById('btnAndroid').style.display = 'none';
+    </script>
+  </body>
+</html>
+
