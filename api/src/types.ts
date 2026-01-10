@@ -5,7 +5,11 @@ export type PostDoc = {
   time: string;
   content: string;
   contentType?: string;
-  geolocator?: { h3?: string; accuracyM?: number } | null;
+  geolocator?: {
+    h3_res6?: string;   // ~36 km² metro-scale
+    h3_res7?: string;   // ~5 km² district-scale
+    accuracyM?: number;
+  } | null;
   locationSource?: "device" | "userProvided";
   geolocatorStatus?: "resolved" | "missing_device_location";
 };

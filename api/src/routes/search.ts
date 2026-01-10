@@ -18,20 +18,20 @@ function toPublicPost(doc: PostDoc): PublicPost | null {
     messageId: doc.messageId,
     time: doc.time,
     content: doc.content,
-    geolocatorH3: doc.geolocator?.h3,
+    geolocatorH3: doc.geolocator?.h3_res7,  // h3 field removed, use h3_res7
     accuracyM: doc.geolocator?.accuracyM
   };
 }
 
 /**
  * Get the Firestore field name for a given H3 resolution
- * Server stores: h3 (backward compat res7), h3_res6, h3_res7
+ * Server stores only: h3_res6 (~36km²), h3_res7 (~5km²)
+ * Note: The redundant "h3" field was removed from loxation-server
  */
 function getH3Field(resolution: number): string {
   if (resolution === 6) return "geolocator.h3_res6";
-  if (resolution === 7) return "geolocator.h3_res7";
-  // Default to h3 field (backward compatible, resolution 7)
-  return "geolocator.h3";
+  // Default to h3_res7 for resolution 7 or any other value
+  return "geolocator.h3_res7";
 }
 
 export function buildSearchRouter(): Router {
@@ -66,13 +66,28 @@ export function buildSearchRouter(): Router {
       const resolution = clampInt(req.query.resolution, 7, 6, 7);
       const h3Cells = parseH3List(req.query.h3, 200);
       
-      // Legacy support
+      // Deprecated h3r7/h3r8 params - old clients may still use these
       const h3r7 = parseH3List(req.query.h3r7, 200);
       const h3r8 = parseH3List(req.query.h3r8, 200);
       
-      // Prefer new h3 param, fall back to legacy
-      const all = h3Cells.length > 0 ? h3Cells : [...h3r7, ...h3r8];
-      const h3Field = h3Cells.length > 0 ? getH3Field(resolution) : "geolocator.h3";
+      // Priority: new h3 param > deprecated h3r7 > deprecated h3r8
+      let all: string[];
+      let h3Field: string;
+      
+      if (h3Cells.length > 0) {
+        all = h3Cells;
+        h3Field = getH3Field(resolution);
+      } else if (h3r7.length > 0) {
+        all = h3r7;
+        h3Field = "geolocator.h3_res7";
+      } else if (h3r8.length > 0) {
+        // h3r8 cells won't match h3_res7, but avoid errors
+        all = h3r8;
+        h3Field = "geolocator.h3_res7";
+      } else {
+        all = [];
+        h3Field = "geolocator.h3_res7";
+      }
 
       const db = getDb();
 

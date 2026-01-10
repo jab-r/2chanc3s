@@ -18,7 +18,7 @@ function toPublicPost(doc: PostDoc): PublicPost | null {
     messageId: doc.messageId,
     time: doc.time,
     content: doc.content,
-    geolocatorH3: doc.geolocator?.h3,
+    geolocatorH3: doc.geolocator?.h3_res7,  // h3 field removed, use h3_res7
     accuracyM: doc.geolocator?.accuracyM
   };
 }
@@ -78,13 +78,13 @@ async function queryInBatches(
 
 /**
  * Get the Firestore field name for a given H3 resolution
- * Server stores: h3 (backward compat res7), h3_res6, h3_res7
+ * Server stores only: h3_res6 (~36km²), h3_res7 (~5km²)
+ * Note: The redundant "h3" field was removed from loxation-server
  */
 function getH3Field(resolution: number): string {
   if (resolution === 6) return "geolocator.h3_res6";
-  if (resolution === 7) return "geolocator.h3_res7";
-  // Default to h3 field (backward compatible, resolution 7)
-  return "geolocator.h3";
+  // Default to h3_res7 for resolution 7 or any other value
+  return "geolocator.h3_res7";
 }
 
 export function buildFeedRouter(): Router {
@@ -95,8 +95,8 @@ export function buildFeedRouter(): Router {
    * Query:
    * - h3: comma-separated H3 cells for multi-resolution queries
    * - resolution: 6 or 7 (default 7) - determines which geolocator field to query
-   * - h3r7: (legacy) comma-separated H3 resolution 7 cells
-   * - h3r8: (legacy) comma-separated H3 resolution 8 cells
+   * - h3r7: (deprecated) comma-separated H3 resolution 7 cells
+   * - h3r8: (deprecated) comma-separated H3 resolution 8 cells - mapped to h3_res7
    * - limit: 1..100
    *
    * Returns full content; UI may choose to show a snippet.
@@ -135,11 +135,13 @@ export function buildFeedRouter(): Router {
         }
       } else if (h3r8.length > 0) {
         // Deprecated: fallback to h3r8 if no r7 provided
+        // Note: h3 field was removed, use h3_res7 (res8 cells won't match but at least won't error)
         all = h3r8;
-        h3Field = "geolocator.h3";  // h3 field is backward compatible
+        h3Field = "geolocator.h3_res7";
+        console.warn(`Deprecated h3r8 param used with ${h3r8.length} cells - mapped to h3_res7 (may not match)`);
       } else {
         all = [];
-        h3Field = "geolocator.h3";
+        h3Field = "geolocator.h3_res7";
       }
 
       if (all.length === 0) {
