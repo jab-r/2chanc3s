@@ -110,22 +110,42 @@ async function apiGet(path, params) {
 }
 
 /**
- * Compute H3 tokens for a given location with hybrid logic:
- * - For k <= 3: use both r7 and r8 (granular nearby matching)
- * - For k >= 5: use r7 only (reduces query volume for metro-scale)
+ * Compute H3 tokens for a given location using multi-resolution approach.
+ * Server now stores h3_res6 (~36 km², metro) and h3_res7 (~5 km², district).
+ *
+ * Strategy:
+ * - k <= 3: use resolution 7 for district-level precision
+ * - k >= 5: use resolution 6 for metro-level efficiency (fewer cells)
+ *
+ * With multi-resolution, we only need small k-rings (0-2) at the appropriate resolution.
  */
 function computeH3Tokens(lat, lng, k) {
-  const cell7 = latLngToCell(lat, lng, 7);
-  const r7 = Array.from(gridDisk(cell7, k));
+  // Choose resolution and effective k based on search radius
+  // For larger areas, use coarser resolution with smaller k-ring
+  let resolution, effectiveK;
   
-  // For larger radii (metro-scale), skip r8 to reduce query volume
   if (k >= 5) {
-    return { r7, r8: [], centerCell: cell7 };
+    // Metro scale: use res 6 (~36 km² per cell)
+    // k=5 at res7 ≈ k=1 at res6, k=10 at res7 ≈ k=2 at res6
+    resolution = 6;
+    effectiveK = Math.min(Math.ceil(k / 5), 3); // Cap at k=3 for res6
+  } else {
+    // District scale: use res 7 (~5 km² per cell)
+    resolution = 7;
+    effectiveK = k;
   }
   
-  const cell8 = latLngToCell(lat, lng, 8);
-  const r8 = Array.from(gridDisk(cell8, k));
-  return { r7, r8, centerCell: cell7 };
+  const centerCell = latLngToCell(lat, lng, resolution);
+  const cells = Array.from(gridDisk(centerCell, effectiveK));
+  
+  return {
+    cells,
+    resolution,
+    centerCell,
+    // Legacy fields for backward compatibility
+    r7: resolution === 7 ? cells : [],
+    r8: []
+  };
 }
 
 /**
@@ -147,21 +167,19 @@ async function loadFeed() {
   }
   setStatus('Loading…');
   const limit = Number(limitEl.value);
+  
+  // Use new multi-resolution API
   const params = {
-    h3r7: lastH3.r7.join(','),
+    h3: lastH3.cells.join(','),
+    resolution: lastH3.resolution,
     limit
   };
-  // Only include r8 if we have cells
-  if (lastH3.r8 && lastH3.r8.length > 0) {
-    params.h3r8 = lastH3.r8.join(',');
-  }
   
   try {
     const data = await apiGet('/api/feed', params);
     renderPosts(data.posts);
-    const k = Number(kEl.value);
-    const mode = k >= 5 ? 'r7 only' : 'r7+r8';
-    setStatus(`Loaded ${data.posts.length} posts (${lastH3.r7.length} cells, ${mode})`);
+    const resLabel = lastH3.resolution === 6 ? 'metro (res6)' : 'district (res7)';
+    setStatus(`Loaded ${data.posts.length} posts (${lastH3.cells.length} cells, ${resLabel})`);
   } catch (e) {
     setStatus(`Error: ${e.message}`);
   }
@@ -179,15 +197,15 @@ async function runSearch() {
   }
   setStatus('Searching…');
   const limit = Number(limitEl.value);
+  
+  // Use new multi-resolution API
   const params = {
     q,
-    h3r7: lastH3.r7.join(','),
+    h3: lastH3.cells.join(','),
+    resolution: lastH3.resolution,
     limit,
     maxScan: 500
   };
-  if (lastH3.r8 && lastH3.r8.length > 0) {
-    params.h3r8 = lastH3.r8.join(',');
-  }
   
   try {
     const data = await apiGet('/api/search', params);

@@ -23,12 +23,26 @@ function toPublicPost(doc: PostDoc): PublicPost | null {
   };
 }
 
+/**
+ * Get the Firestore field name for a given H3 resolution
+ * Server stores: h3 (backward compat res7), h3_res6, h3_res7
+ */
+function getH3Field(resolution: number): string {
+  if (resolution === 6) return "geolocator.h3_res6";
+  if (resolution === 7) return "geolocator.h3_res7";
+  // Default to h3 field (backward compatible, resolution 7)
+  return "geolocator.h3";
+}
+
 export function buildSearchRouter(): Router {
   const router = Router();
 
   /**
    * GET /api/search?q=...
-   * Optional: h3r7, h3r8 (restrict search to nearby buckets)
+   * Optional:
+   * - h3: comma-separated H3 cells with resolution param
+   * - resolution: 6 or 7 (default 7)
+   * - h3r7, h3r8: (legacy) restrict search to nearby buckets
    *
    * NOTE: Firestore does not support substring search without specialized indexing.
    * v1 strategy: bounded scan over recent posts (and optionally within nearby H3 buckets)
@@ -48,10 +62,17 @@ export function buildSearchRouter(): Router {
       const limit = clampInt(req.query.limit, 50, 1, 100);
       const maxScan = clampInt(req.query.maxScan, 500, 50, 2000);
 
-      // Increased from 50 to 200 to support metro-scale searches (k=10+)
+      // New multi-resolution approach
+      const resolution = clampInt(req.query.resolution, 7, 6, 7);
+      const h3Cells = parseH3List(req.query.h3, 200);
+      
+      // Legacy support
       const h3r7 = parseH3List(req.query.h3r7, 200);
-      const h3r8 = parseH3List(req.query.h3r8, 200); // Optional for large radius queries
-      const all = [...h3r7, ...h3r8];
+      const h3r8 = parseH3List(req.query.h3r8, 200);
+      
+      // Prefer new h3 param, fall back to legacy
+      const all = h3Cells.length > 0 ? h3Cells : [...h3r7, ...h3r8];
+      const h3Field = h3Cells.length > 0 ? getH3Field(resolution) : "geolocator.h3";
 
       const db = getDb();
 
@@ -61,19 +82,27 @@ export function buildSearchRouter(): Router {
         const chunks: string[][] = [];
         for (let i = 0; i < all.length; i += 10) chunks.push(all.slice(i, i + 10));
 
-        const snaps = await Promise.all(
-          chunks.map((chunk) =>
-            db
-              .collection(POSTS_COLLECTION)
-              .where("geolocator.h3", "in", chunk)
-              .orderBy("time", "desc")
-              .limit(Math.ceil(maxScan / chunks.length))
-              .get()
-          )
-        );
-
+        // Use batched queries with limited concurrency (5 at a time) to avoid overwhelming Firestore
         const docs: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>[] = [];
-        for (const s of snaps) docs.push(...s.docs);
+        const concurrency = 5;
+        for (let i = 0; i < chunks.length; i += concurrency) {
+          const batch = chunks.slice(i, i + concurrency);
+          try {
+            const snaps = await Promise.all(
+              batch.map((chunk) =>
+                db
+                  .collection(POSTS_COLLECTION)
+                  .where(h3Field, "in", chunk)
+                  .orderBy("time", "desc")
+                  .limit(Math.ceil(maxScan / chunks.length))
+                  .get()
+              )
+            );
+            for (const s of snaps) docs.push(...s.docs);
+          } catch (err) {
+            console.error(`Firestore search query error on ${h3Field}:`, err);
+          }
+        }
         // Fake a QuerySnapshot-like object for unified iteration.
         candidates = { docs } as any;
       } else {
