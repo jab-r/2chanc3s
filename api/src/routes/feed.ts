@@ -112,13 +112,35 @@ export function buildFeedRouter(): Router {
       const resolution = clampInt(req.query.resolution, 7, 6, 7);
       const h3Cells = parseH3List(req.query.h3, 200);
       
-      // Legacy support: h3r7/h3r8 params (backward compatible)
+      // Deprecated h3r7/h3r8 params - old cached web app versions may still use these.
+      // When both are sent, it results in 12KB+ URLs and 60+ Firestore queries.
+      // We ignore h3r8 when h3r7 is present to cut queries in half.
       const h3r7 = parseH3List(req.query.h3r7, 200);
       const h3r8 = parseH3List(req.query.h3r8, 200);
       
-      // Prefer new h3 param, fall back to legacy
-      const all = h3Cells.length > 0 ? h3Cells : [...h3r7, ...h3r8];
-      const h3Field = h3Cells.length > 0 ? getH3Field(resolution) : "geolocator.h3";
+      // Priority: new h3 param > deprecated h3r7 > deprecated h3r8
+      let all: string[];
+      let h3Field: string;
+      
+      if (h3Cells.length > 0) {
+        // New multi-resolution approach with explicit resolution selector
+        all = h3Cells;
+        h3Field = getH3Field(resolution);
+      } else if (h3r7.length > 0) {
+        // Deprecated: use h3r7 (~5km² cells) with new indexed field
+        all = h3r7;
+        h3Field = "geolocator.h3_res7";
+        if (h3r8.length > 0) {
+          console.warn(`Cached client sent both h3r7 (${h3r7.length}) and h3r8 (${h3r8.length}) - ignoring h3r8`);
+        }
+      } else if (h3r8.length > 0) {
+        // Deprecated: fallback to h3r8 if no r7 provided
+        all = h3r8;
+        h3Field = "geolocator.h3";  // h3 field is backward compatible
+      } else {
+        all = [];
+        h3Field = "geolocator.h3";
+      }
 
       if (all.length === 0) {
         return res.status(400).json({
