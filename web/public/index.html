@@ -5,6 +5,14 @@
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>2chanc3s — missed connections</title>
     <link rel="stylesheet" href="/style.css" />
+    <!-- Import map to resolve h3-js from CDN -->
+    <script type="importmap">
+      {
+        "imports": {
+          "h3-js": "https://esm.sh/h3-js@4.1.0"
+        }
+      }
+    </script>
   </head>
   <body>
     <header class="top">
@@ -15,13 +23,21 @@
     <main class="wrap">
       <section class="panel">
         <div class="row">
-          <button id="btnLocate">Use my location</button>
+          <input id="address" type="text" placeholder="City or address (e.g. Cincinnati OH)" />
+          <button id="btnGeocode">Set Location</button>
+          <span class="or-sep">or</span>
+          <button id="btnLocate">Use GPS</button>
+        </div>
+
+        <div class="row">
           <label class="inline">
             radius
             <select id="k">
-              <option value="0">k=0</option>
-              <option value="1" selected>k=1</option>
-              <option value="2">k=2</option>
+              <option value="1" selected>Nearby ~5km</option>
+              <option value="3">Local ~12km</option>
+              <option value="5">District ~20km</option>
+              <option value="10">Metro ~40km</option>
+              <option value="15">Region ~60km</option>
             </select>
           </label>
           <label class="inline">
@@ -41,6 +57,7 @@
         </div>
 
         <div id="status" class="status"></div>
+        <div id="locInfo" class="loc-info"></div>
       </section>
 
       <section id="list" class="list"></section>

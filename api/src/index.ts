@@ -10,6 +10,9 @@ const config = getConfig();
 
 const app = express();
 
+// Trust the first proxy (Cloud Run load balancer) for X-Forwarded-For headers
+app.set("trust proxy", 1);
+
 app.disable("x-powered-by");
 
 app.use(

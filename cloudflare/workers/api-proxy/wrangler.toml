@@ -2,6 +2,12 @@ name = "2chanc3s-api-proxy"
 main = "src/index.ts"
 compatibility_date = "2025-12-01"
 
+# If the Cloudflare dashboard is not showing “Routes/Triggers”, let Wrangler attach the HTTP route.
+# This will bind the worker to `https://www.2chanc3s.com/api/*`.
+routes = [
+  { pattern = "www.2chanc3s.com/api/*", zone_name = "2chanc3s.com" }
+]
+
 [vars]
 # Set this to your Cloud Run origin host (no path)
 # Deployed service URL: https://chanc3s-api-696735170560.us-central1.run.app

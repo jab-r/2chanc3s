@@ -60,8 +60,9 @@ export function buildFeedRouter(): Router {
       // Overfetch to compensate for filtering missing usernames.
       const overfetch = Math.min(200, Math.max(limit * 3, 50));
 
-      const h3r7 = parseH3List(req.query.h3r7, 50);
-      const h3r8 = parseH3List(req.query.h3r8, 50);
+      // Increased from 50 to 200 to support metro-scale searches (k=10+)
+      const h3r7 = parseH3List(req.query.h3r7, 200);
+      const h3r8 = parseH3List(req.query.h3r8, 200); // Optional for large radius queries
       const all = [...h3r7, ...h3r8];
 
       if (all.length === 0) {

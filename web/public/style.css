@@ -63,17 +63,34 @@ button, .btn {
 
 button:hover, .btn:hover { border-color: var(--accent); }
 
-input[type="search"] {
+input[type="search"], input[type="text"] {
   flex: 1;
-  min-width: 240px;
+  min-width: 180px;
   padding: 8px 10px;
   border: 1px solid var(--line);
   background: #fff;
 }
 
+input#address {
+  max-width: 300px;
+}
+
+.or-sep {
+  font-size: 12px;
+  opacity: 0.6;
+  padding: 0 4px;
+}
+
 .inline { display: inline-flex; gap: 6px; align-items: center; }
 
 .status { font-size: 12px; opacity: 0.85; }
+
+.loc-info {
+  font-size: 11px;
+  opacity: 0.7;
+  margin-top: 6px;
+  font-family: ui-monospace, monospace;
+}
 
 .list { margin-top: 14px; }
 

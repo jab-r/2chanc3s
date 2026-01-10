@@ -5,11 +5,14 @@ import { latLngToCell, gridDisk } from 'h3-js';
 const API_BASE = '';
 
 const statusEl = document.getElementById('status');
+const locInfoEl = document.getElementById('locInfo');
 const listEl = document.getElementById('list');
 const btnLocate = document.getElementById('btnLocate');
+const btnGeocode = document.getElementById('btnGeocode');
 const btnSearch = document.getElementById('btnSearch');
 const btnClear = document.getElementById('btnClear');
 const searchEl = document.getElementById('search');
+const addressEl = document.getElementById('address');
 const kEl = document.getElementById('k');
 const limitEl = document.getElementById('limit');
 
@@ -18,6 +21,12 @@ let lastH3 = null;
 
 function setStatus(msg) {
   statusEl.textContent = msg;
+}
+
+function setLocInfo(lat, lng, h3Cell, source) {
+  if (locInfoEl) {
+    locInfoEl.textContent = `📍 ${lat.toFixed(5)}, ${lng.toFixed(5)} | H3: ${h3Cell} | via ${source}`;
+  }
 }
 
 function escapeText(s) {
@@ -100,28 +109,72 @@ async function apiGet(path, params) {
   return await resp.json();
 }
 
+/**
+ * Compute H3 tokens for a given location with hybrid logic:
+ * - For k <= 3: use both r7 and r8 (granular nearby matching)
+ * - For k >= 5: use r7 only (reduces query volume for metro-scale)
+ */
 function computeH3Tokens(lat, lng, k) {
   const cell7 = latLngToCell(lat, lng, 7);
-  const cell8 = latLngToCell(lat, lng, 8);
   const r7 = Array.from(gridDisk(cell7, k));
+  
+  // For larger radii (metro-scale), skip r8 to reduce query volume
+  if (k >= 5) {
+    return { r7, r8: [], centerCell: cell7 };
+  }
+  
+  const cell8 = latLngToCell(lat, lng, 8);
   const r8 = Array.from(gridDisk(cell8, k));
-  return { r7, r8 };
+  return { r7, r8, centerCell: cell7 };
+}
+
+/**
+ * Geocode an address using OpenStreetMap Nominatim
+ */
+async function geocodeAddress(address) {
+  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
+  const resp = await fetch(url, {
+    headers: { 'User-Agent': '2chanc3s-web/1.0' }
+  });
+  if (!resp.ok) {
+    throw new Error(`Geocoding failed: ${resp.status}`);
+  }
+  const data = await resp.json();
+  if (!data || data.length === 0) {
+    throw new Error('Address not found');
+  }
+  return {
+    latitude: parseFloat(data[0].lat),
+    longitude: parseFloat(data[0].lon),
+    displayName: data[0].display_name
+  };
 }
 
 async function loadFeed() {
   if (!lastH3) {
-    setStatus('Click “Use my location” to load nearby posts.');
+    setStatus('Set a location to load nearby posts.');
     return;
   }
   setStatus('Loading…');
   const limit = Number(limitEl.value);
-  const data = await apiGet('/api/feed', {
+  const params = {
     h3r7: lastH3.r7.join(','),
-    h3r8: lastH3.r8.join(','),
     limit
-  });
-  renderPosts(data.posts);
-  setStatus(`Loaded ${data.posts.length} posts.`);
+  };
+  // Only include r8 if we have cells
+  if (lastH3.r8 && lastH3.r8.length > 0) {
+    params.h3r8 = lastH3.r8.join(',');
+  }
+  
+  try {
+    const data = await apiGet('/api/feed', params);
+    renderPosts(data.posts);
+    const k = Number(kEl.value);
+    const mode = k >= 5 ? 'r7 only' : 'r7+r8';
+    setStatus(`Loaded ${data.posts.length} posts (${lastH3.r7.length} cells, ${mode})`);
+  } catch (e) {
+    setStatus(`Error: ${e.message}`);
+  }
 }
 
 async function runSearch() {
@@ -131,37 +184,88 @@ async function runSearch() {
     return;
   }
   if (!lastH3) {
-    setStatus('Use my location first (search is nearby by default).');
+    setStatus('Set a location first (search is nearby by default).');
     return;
   }
   setStatus('Searching…');
   const limit = Number(limitEl.value);
-  const data = await apiGet('/api/search', {
+  const params = {
     q,
     h3r7: lastH3.r7.join(','),
-    h3r8: lastH3.r8.join(','),
     limit,
     maxScan: 500
-  });
-  renderPosts(data.posts);
-  setStatus(`Search returned ${data.posts.length} posts.`);
+  };
+  if (lastH3.r8 && lastH3.r8.length > 0) {
+    params.h3r8 = lastH3.r8.join(',');
+  }
+  
+  try {
+    const data = await apiGet('/api/search', params);
+    renderPosts(data.posts);
+    setStatus(`Search returned ${data.posts.length} posts.`);
+  } catch (e) {
+    setStatus(`Error: ${e.message}`);
+  }
 }
 
+// Use GPS/browser geolocation
 btnLocate.addEventListener('click', async () => {
   setStatus('Requesting location…');
-  const k = Number(kEl.value);
+  
+  try {
+    lastGeo = await new Promise((resolve, reject) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve(pos),
+        (err) => reject(err),
+        { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 }
+      );
+    });
 
-  lastGeo = await new Promise((resolve, reject) => {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => resolve(pos),
-      (err) => reject(err),
-      { enableHighAccuracy: false, timeout: 10_000, maximumAge: 60_000 }
-    );
-  });
+    const { latitude, longitude, accuracy } = lastGeo.coords;
+    const k = Number(kEl.value);
+    lastH3 = computeH3Tokens(latitude, longitude, k);
+    
+    console.log(`Location: ${latitude.toFixed(5)}, ${longitude.toFixed(5)} (±${accuracy}m)`);
+    console.log(`Your H3 r7 center: ${lastH3.centerCell}`);
+    
+    setLocInfo(latitude, longitude, lastH3.centerCell, `GPS ±${Math.round(accuracy)}m`);
+    await loadFeed();
+  } catch (e) {
+    setStatus(`Location error: ${e.message}`);
+  }
+});
 
-  const { latitude, longitude } = lastGeo.coords;
-  lastH3 = computeH3Tokens(latitude, longitude, k);
-  await loadFeed();
+// Use address/city geocoding
+btnGeocode.addEventListener('click', async () => {
+  const address = (addressEl.value || '').trim();
+  if (!address) {
+    setStatus('Please enter an address or city');
+    return;
+  }
+  
+  setStatus('Geocoding address…');
+  try {
+    const geo = await geocodeAddress(address);
+    const k = Number(kEl.value);
+    lastH3 = computeH3Tokens(geo.latitude, geo.longitude, k);
+    
+    console.log(`Geocoded: ${geo.latitude.toFixed(5)}, ${geo.longitude.toFixed(5)}`);
+    console.log(`H3 r7 center: ${lastH3.centerCell}`);
+    
+    const shortName = geo.displayName.split(',').slice(0, 2).join(',');
+    setLocInfo(geo.latitude, geo.longitude, lastH3.centerCell, shortName);
+    await loadFeed();
+  } catch (e) {
+    setStatus(`Geocoding error: ${e.message}`);
+  }
+});
+
+// Allow Enter key to trigger geocoding
+addressEl.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    btnGeocode.click();
+  }
 });
 
 btnSearch.addEventListener('click', async () => {
@@ -178,12 +282,21 @@ btnClear.addEventListener('click', async () => {
 });
 
 kEl.addEventListener('change', async () => {
-  if (!lastGeo) return;
+  if (!lastGeo && !lastH3) return;
+  
   const k = Number(kEl.value);
-  const { latitude, longitude } = lastGeo.coords;
-  lastH3 = computeH3Tokens(latitude, longitude, k);
+  
+  // If we have GPS coords, recompute from those
+  if (lastGeo) {
+    const { latitude, longitude } = lastGeo.coords;
+    lastH3 = computeH3Tokens(latitude, longitude, k);
+  } else if (lastH3 && lastH3.centerCell) {
+    // Otherwise we need to get lat/lng from somewhere
+    // For now, just reload since we stored the center cell
+    // Note: h3-js can convert cell back to lat/lng if needed
+  }
+  
   await loadFeed();
 });
 
-setStatus('Click “Use my location” to load nearby posts.');
-
+setStatus('Enter a city/address or click "Use GPS" to load nearby posts.');

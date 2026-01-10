@@ -69,6 +69,7 @@ Requires `Authorization: Bearer <token>`.
 #### Fields
 - `message` (required): string content.
 - `messageId` (required): client-generated id for idempotency.
+- `username` client username to display post by and enable responding
 - `contentType` (optional): defaults to `text/plain`.
 - `location` (optional, nullable):
   - If omitted or `null`, derive geolocator from device last-known location stored by the location subsystem.

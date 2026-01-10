@@ -48,8 +48,9 @@ export function buildSearchRouter(): Router {
       const limit = clampInt(req.query.limit, 50, 1, 100);
       const maxScan = clampInt(req.query.maxScan, 500, 50, 2000);
 
-      const h3r7 = parseH3List(req.query.h3r7, 50);
-      const h3r8 = parseH3List(req.query.h3r8, 50);
+      // Increased from 50 to 200 to support metro-scale searches (k=10+)
+      const h3r7 = parseH3List(req.query.h3r7, 200);
+      const h3r8 = parseH3List(req.query.h3r8, 200); // Optional for large radius queries
       const all = [...h3r7, ...h3r8];
 
       const db = getDb();
