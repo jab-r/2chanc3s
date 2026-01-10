@@ -5,6 +5,7 @@ import rateLimit from "express-rate-limit";
 import { getConfig } from "./config.js";
 import { buildFeedRouter } from "./routes/feed.js";
 import { buildSearchRouter } from "./routes/search.js";
+import { buildGeocodeRouter } from "./routes/geocode.js";
 
 const config = getConfig();
 
@@ -56,6 +57,7 @@ app.get("/", (_req, res) => res.status(200).send("2chanc3s api"));
 
 app.use("/api", buildFeedRouter());
 app.use("/api", buildSearchRouter());
+app.use("/api", buildGeocodeRouter());
 
 // Error handler
 app.use((err: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {

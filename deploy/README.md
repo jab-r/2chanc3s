@@ -22,11 +22,7 @@ Goal:
 Run from repo root:
 
 ```bash
-gcloud run deploy 2chanc3s-api \
-  --source ./api \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --set-env-vars "FIREBASE_PROJECT_ID=loxation-f8e1c,CORS_ALLOWED_ORIGINS=https://www.2chanc3s.com,CORS_ALLOW_LOCALHOST=false"
+gcloud run deploy chanc3s-api --source ./api --region us-central1 --allow-unauthenticated --set-env-vars "FIREBASE_PROJECT_ID=loxation-f8e1c,CORS_ALLOWED_ORIGINS=https://www.2chanc3s.com,CORS_ALLOW_LOCALHOST=false"
 ```
 
 Notes:

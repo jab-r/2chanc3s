@@ -129,24 +129,14 @@ function computeH3Tokens(lat, lng, k) {
 }
 
 /**
- * Geocode an address using OpenStreetMap Nominatim
+ * Geocode an address using our API proxy (which calls Nominatim server-side to avoid CORS)
  */
 async function geocodeAddress(address) {
-  const url = `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(address)}&limit=1`;
-  const resp = await fetch(url, {
-    headers: { 'User-Agent': '2chanc3s-web/1.0' }
-  });
-  if (!resp.ok) {
-    throw new Error(`Geocoding failed: ${resp.status}`);
-  }
-  const data = await resp.json();
-  if (!data || data.length === 0) {
-    throw new Error('Address not found');
-  }
+  const data = await apiGet('/api/geocode', { q: address });
   return {
-    latitude: parseFloat(data[0].lat),
-    longitude: parseFloat(data[0].lon),
-    displayName: data[0].display_name
+    latitude: data.lat,
+    longitude: data.lon,
+    displayName: data.displayName
   };
 }
 
