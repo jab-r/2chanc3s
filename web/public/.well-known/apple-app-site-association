@@ -3,9 +3,10 @@
     "apps": [],
     "details": [
       {
-        "appID": "TEAM_ID.BUNDLE_ID",
+        "appID": "2TS8ML5579.com.jabresearch.loxation",
         "paths": [
-          "/reply"
+          "/reply",
+          "/reply/*"
         ]
       }
     ]
