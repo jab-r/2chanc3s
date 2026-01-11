@@ -15,18 +15,25 @@ export default {
     }
 
     // Handle /api/geoip - return Cloudflare's IP geolocation data (edge-only, no backend)
+    // Uses request.cf object which contains geo data for all Cloudflare plans
     if (url.pathname === "/api/geoip") {
-      const lat = request.headers.get("CF-IPLatitude");
-      const lng = request.headers.get("CF-IPLongitude");
-      const city = request.headers.get("CF-IPCity");
-      const country = request.headers.get("CF-IPCountry");
+      // Cloudflare Workers have a `cf` property on the request with geo data
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const cf = (request as any).cf as {
+        latitude?: string;
+        longitude?: string;
+        city?: string;
+        region?: string;
+        country?: string;
+      } | undefined;
 
       return new Response(
         JSON.stringify({
-          lat: lat ? parseFloat(lat) : null,
-          lng: lng ? parseFloat(lng) : null,
-          city: city ? decodeURIComponent(city) : null,
-          country: country || null,
+          lat: cf?.latitude ? parseFloat(cf.latitude) : null,
+          lng: cf?.longitude ? parseFloat(cf.longitude) : null,
+          city: cf?.city || null,
+          region: cf?.region || null,
+          country: cf?.country || null,
           source: "ip"
         }),
         {
