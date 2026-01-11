@@ -14,20 +14,45 @@ export default {
       return new Response("not found", { status: 404 });
     }
 
+    // Handle /api/geoip - return Cloudflare's IP geolocation data (edge-only, no backend)
+    if (url.pathname === "/api/geoip") {
+      const lat = request.headers.get("CF-IPLatitude");
+      const lng = request.headers.get("CF-IPLongitude");
+      const city = request.headers.get("CF-IPCity");
+      const country = request.headers.get("CF-IPCountry");
+
+      return new Response(
+        JSON.stringify({
+          lat: lat ? parseFloat(lat) : null,
+          lng: lng ? parseFloat(lng) : null,
+          city: city ? decodeURIComponent(city) : null,
+          country: country || null,
+          source: "ip"
+        }),
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Cache-Control": "private, max-age=300" // 5 min, IP-based so don't cache publicly
+          }
+        }
+      );
+    }
+
     const upstream = new URL(request.url);
     upstream.protocol = "https:";
     upstream.hostname = env.CLOUD_RUN_ORIGIN;
 
     // Preserve method and body.
+    const headers = new Headers(request.headers);
+    // Avoid confusing the upstream with the Pages host.
+    headers.set("host", env.CLOUD_RUN_ORIGIN);
+
     const init: RequestInit = {
       method: request.method,
-      headers: new Headers(request.headers),
+      headers,
       body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
       redirect: "manual"
     };
-
-    // Avoid confusing the upstream with the Pages host.
-    init.headers.set("host", env.CLOUD_RUN_ORIGIN);
 
     const resp = await fetch(upstream.toString(), init);
 

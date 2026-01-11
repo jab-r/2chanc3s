@@ -160,6 +160,56 @@ async function geocodeAddress(address) {
   };
 }
 
+/**
+ * Get IP-based geolocation from Cloudflare (edge-only, instant response)
+ * Returns: { lat, lng, city, country, source } or null if unavailable
+ */
+async function getIPGeolocation() {
+  try {
+    const resp = await fetch('/api/geoip');
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (data.lat == null || data.lng == null) return null;
+    return data;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Initialize with IP-based location on page load.
+ * Uses metro-wide radius (~60km via H3 res6 k=2) for coarse IP accuracy.
+ */
+async function initWithIPLocation() {
+  setStatus('Detecting your location...');
+  
+  const geo = await getIPGeolocation();
+  if (!geo) {
+    setStatus('Could not detect location. Enter a city/address or use GPS.');
+    return;
+  }
+  
+  // Use H3 resolution 6 with k=2 for ~60km metro coverage (appropriate for IP accuracy)
+  const resolution = 6;
+  const k = 2;
+  
+  const centerCell = latLngToCell(geo.lat, geo.lng, resolution);
+  const cells = Array.from(gridDisk(centerCell, k));
+  
+  lastH3 = {
+    cells,
+    resolution,
+    centerCell,
+    r7: [],
+    r8: []
+  };
+  
+  const cityDisplay = geo.city || 'your area';
+  setLocInfo(geo.lat, geo.lng, centerCell, `IP (${cityDisplay})`);
+  
+  await loadFeed();
+}
+
 async function loadFeed() {
   if (!lastH3) {
     setStatus('Set a location to load nearby posts.');
@@ -307,4 +357,5 @@ kEl.addEventListener('change', async () => {
   await loadFeed();
 });
 
-setStatus('Enter a city/address or click "Use GPS" to load nearby posts.');
+// Auto-load posts using IP-based geolocation on page load
+initWithIPLocation();
