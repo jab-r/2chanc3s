@@ -178,7 +178,10 @@ async function getIPGeolocation() {
 
 /**
  * Initialize with IP-based location on page load.
- * Uses metro-wide radius (~60km via H3 res6 k=2) for coarse IP accuracy.
+ * Uses metro-wide radius (~60km via H3 res6 k=10) for coarse IP accuracy.
+ *
+ * H3 Resolution 6: edge ~3.23km, so k=10 gives ~60km diameter coverage
+ * Formula: diameter ≈ 2 * k * edge_length = 2 * 10 * 3.23 ≈ 65km
  */
 async function initWithIPLocation() {
   setStatus('Detecting your location...');
@@ -189,9 +192,10 @@ async function initWithIPLocation() {
     return;
   }
   
-  // Use H3 resolution 6 with k=2 for ~60km metro coverage (appropriate for IP accuracy)
+  // Use H3 resolution 6 with k=10 for ~60km metro coverage (appropriate for IP accuracy)
+  // k=10 at res6 creates 331 cells covering ~65km diameter
   const resolution = 6;
-  const k = 2;
+  const k = 10;
   
   const centerCell = latLngToCell(geo.lat, geo.lng, resolution);
   const cells = Array.from(gridDisk(centerCell, k));
