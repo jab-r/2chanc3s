@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "com.jabresearch.loxation",
       "sha256_cert_fingerprints": [
-        "79:D4:3E:D2:E6:B8:78:EE:BA:74:1D:8A:BF:3B:6E:EB:B1:94:6B:70:C7:06:F3:2E:FA:C1:1C:D2:5C:D5:6F:BB"
+        "79:D4:3E:D2:E6:B8:78:EE:BA:74:1D:8A:BF:3B:6E:EB:B1:94:6B:70:C7:06:F3:2E:FA:C1:1C:D2:5C:D5:6F:BB",
+        "90:A2:06:23:C1:A2:F2:99:A5:2E:B2:64:66:0C:C1:92:E7:AF:44:4D:DF:EC:A7:41:0C:29:5D:26:62:09:D2:8D"
       ]
     }
   }
