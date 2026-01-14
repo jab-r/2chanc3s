@@ -47,6 +47,152 @@ function replyUrl(username, messageId) {
   return `https://www.2chanc3s.com/reply?username=${u}&messageId=${m}`;
 }
 
+/**
+ * Render media element for a post
+ * @param {Object} media - Media info from API {type, thumbnail, medium, large, public, stream, duration}
+ * @returns {string} HTML string for the media element
+ */
+function renderMedia(media) {
+  if (!media) return '';
+  
+  if (media.type === 'image') {
+    const thumbUrl = media.medium || media.thumbnail || media.public;
+    const fullUrl = media.large || media.public;
+    if (!thumbUrl) return '';
+    
+    return `
+      <div class="post-media">
+        <img 
+          src="${escapeText(thumbUrl)}" 
+          data-full="${escapeText(fullUrl || thumbUrl)}"
+          alt="Post image"
+          loading="lazy"
+          onclick="window.openLightbox(this)"
+        />
+      </div>
+    `;
+  }
+  
+  if (media.type === 'video') {
+    const posterUrl = media.thumbnail || '';
+    const streamUrl = media.stream;
+    if (!streamUrl) return '';
+    
+    // Generate unique ID for this video element
+    const videoId = 'video-' + Math.random().toString(36).slice(2, 9);
+    
+    return `
+      <div class="post-media">
+        <video 
+          id="${videoId}"
+          poster="${escapeText(posterUrl)}"
+          controls
+          playsinline
+          preload="none"
+          data-stream="${escapeText(streamUrl)}"
+        >
+          Your browser does not support video playback.
+        </video>
+      </div>
+    `;
+  }
+  
+  return '';
+}
+
+/**
+ * Initialize HLS for a video element
+ * @param {HTMLVideoElement} videoEl - The video element to initialize
+ */
+function initVideoPlayer(videoEl) {
+  const streamUrl = videoEl.dataset.stream;
+  if (!streamUrl) return;
+  
+  // Only initialize when video starts playing
+  if (videoEl._hlsInitialized) return;
+  
+  if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
+    // Native HLS support (Safari, iOS)
+    videoEl.src = streamUrl;
+  } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
+    // Use HLS.js for other browsers
+    const hls = new Hls();
+    hls.loadSource(streamUrl);
+    hls.attachMedia(videoEl);
+  } else {
+    // Fallback - try direct source (may not work for HLS)
+    videoEl.src = streamUrl;
+  }
+  
+  videoEl._hlsInitialized = true;
+}
+
+/**
+ * Lightbox functions
+ */
+function openLightbox(imgEl) {
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = document.getElementById('lightbox-img');
+  const lightboxVideo = document.getElementById('lightbox-video');
+  
+  if (!lightbox || !lightboxImg || !lightboxVideo) return;
+  
+  lightboxImg.src = imgEl.dataset.full || imgEl.src;
+  lightboxImg.classList.remove('hidden');
+  lightboxVideo.classList.remove('visible');
+  lightboxVideo.pause();
+  lightboxVideo.src = '';
+  
+  lightbox.classList.remove('hidden');
+  
+  // Prevent body scroll
+  document.body.style.overflow = 'hidden';
+}
+
+function closeLightbox() {
+  const lightbox = document.getElementById('lightbox');
+  const lightboxImg = document.getElementById('lightbox-img');
+  const lightboxVideo = document.getElementById('lightbox-video');
+  
+  if (!lightbox) return;
+  
+  lightbox.classList.add('hidden');
+  if (lightboxImg) {
+    lightboxImg.src = '';
+    lightboxImg.classList.remove('hidden');
+  }
+  if (lightboxVideo) {
+    lightboxVideo.pause();
+    lightboxVideo.src = '';
+    lightboxVideo.classList.remove('visible');
+  }
+  
+  // Restore body scroll
+  document.body.style.overflow = '';
+}
+
+// Make openLightbox available globally for onclick handler
+window.openLightbox = openLightbox;
+
+// Initialize lightbox event listeners
+document.addEventListener('DOMContentLoaded', () => {
+  const lightbox = document.getElementById('lightbox');
+  if (lightbox) {
+    const closeBtn = lightbox.querySelector('.lightbox-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', closeLightbox);
+    }
+    lightbox.addEventListener('click', (e) => {
+      if (e.target === lightbox) closeLightbox();
+    });
+  }
+});
+
+// Close lightbox on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closeLightbox();
+});
+
 function renderPosts(posts) {
   listEl.innerHTML = '';
   if (!posts || posts.length === 0) {
@@ -60,6 +206,7 @@ function renderPosts(posts) {
     const full = p.content || '';
     const snippet = full.length > 240 ? full.slice(0, 240) + '…' : full;
     const hasMore = full.length > snippet.length;
+    const hasMedia = p.media && (p.media.type === 'image' || p.media.type === 'video');
 
     const el = document.createElement('div');
     el.className = 'post';
@@ -69,12 +216,15 @@ function renderPosts(posts) {
         <div>${escapeText(fmtTime(p.time))}</div>
         <div class="mono">id: ${escapeText(messageId)}</div>
       </div>
+      ${renderMedia(p.media)}
       <div class="content" data-full="${escapeText(full)}" data-snippet="${escapeText(snippet)}">${escapeText(snippet)}</div>
       <div class="actions">
         <a class="btn" href="${replyUrl(username, messageId)}">Reply (in app)</a>
-        ${hasMore ? '<button class="btn toggle">Show full</button>' : ''}
+        ${hasMore && !hasMedia ? '<button class="btn toggle">Show full</button>' : ''}
       </div>
     `;
+    
+    // Toggle button for text content
     const toggle = el.querySelector('button.toggle');
     if (toggle) {
       toggle.addEventListener('click', () => {
@@ -91,8 +241,15 @@ function renderPosts(posts) {
         }
       });
     }
+    
     listEl.appendChild(el);
   }
+  
+  // Initialize video players after DOM is updated
+  // Use play event to lazy-load HLS streams
+  document.querySelectorAll('.post-media video[data-stream]').forEach(videoEl => {
+    videoEl.addEventListener('play', () => initVideoPlayer(videoEl), { once: true });
+  });
 }
 
 async function apiGet(path, params) {

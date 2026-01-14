@@ -1,12 +1,77 @@
 import { Router } from "express";
 import { getDb } from "../firestore.js";
-import type { PostDoc, PublicPost } from "../types.js";
+import type { PostDoc, PublicPost, MediaInfo } from "../types.js";
 import { asyncHandler } from "../util/http.js";
 import { clampInt, parseH3List } from "../util/h3.js";
 
 const POSTS_COLLECTION = "posts";
+const MEDIA_COLLECTION = "postMedia";
 
-function toPublicPost(doc: PostDoc): PublicPost | null {
+/**
+ * Media document structure from loxation-server postMedia collection
+ */
+type MediaDoc = {
+  mediaId: string;
+  type: 'image' | 'video';
+  publicUrl: string;
+  variants?: {
+    thumbnail?: string;
+    medium?: string;
+    large?: string;
+    public?: string;
+  };
+  thumbnail?: string;    // video thumbnail
+  streamUrl?: string;    // video HLS manifest
+  duration?: number;
+};
+
+/**
+ * Resolve media URLs for a batch of mediaIds
+ * Returns map of mediaId -> MediaInfo
+ */
+async function resolveMediaUrls(mediaIds: string[]): Promise<Map<string, MediaInfo>> {
+  const result = new Map<string, MediaInfo>();
+  if (mediaIds.length === 0) return result;
+
+  const db = getDb();
+  const uniqueIds = [...new Set(mediaIds.filter(Boolean))];
+  
+  if (uniqueIds.length === 0) return result;
+  
+  try {
+    // Batch get all media docs
+    const mediaRefs = uniqueIds.map(id => db.collection(MEDIA_COLLECTION).doc(id));
+    const snapshots = await db.getAll(...mediaRefs);
+    
+    for (const snap of snapshots) {
+      if (!snap.exists) continue;
+      const data = snap.data() as MediaDoc;
+      
+      if (data.type === 'image') {
+        result.set(data.mediaId, {
+          type: 'image',
+          thumbnail: data.variants?.thumbnail,
+          medium: data.variants?.medium,
+          large: data.variants?.large,
+          public: data.publicUrl || data.variants?.public,
+        });
+      } else if (data.type === 'video') {
+        result.set(data.mediaId, {
+          type: 'video',
+          thumbnail: data.thumbnail,
+          stream: data.streamUrl || data.publicUrl,
+          duration: data.duration,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('Error resolving media URLs:', err);
+  }
+  
+  return result;
+}
+
+function toPublicPost(doc: PostDoc, mediaInfo?: MediaInfo): PublicPost | null {
   const username = typeof doc.username === "string" ? doc.username.trim() : "";
   if (!username) return null;
   if (typeof doc.messageId !== "string" || doc.messageId.trim() === "") return null;
@@ -18,7 +83,9 @@ function toPublicPost(doc: PostDoc): PublicPost | null {
     messageId: doc.messageId,
     time: doc.time,
     content: doc.content,
-    geolocatorH3: doc.geolocator?.h3_res7,  // h3 field removed, use h3_res7
+    contentType: doc.contentType || 'text/plain',
+    media: mediaInfo,
+    geolocatorH3: doc.geolocator?.h3_res7,
     accuracyM: doc.geolocator?.accuracyM
   };
 }
@@ -29,7 +96,7 @@ function toPublicPost(doc: PostDoc): PublicPost | null {
  * @param overfetch Number of posts to fetch per chunk
  * @param h3Field The Firestore field to query (e.g., "geolocator.h3_res6")
  */
-async function queryByH3Chunk(h3Chunk: string[], overfetch: number, h3Field: string): Promise<PublicPost[]> {
+async function queryByH3Chunk(h3Chunk: string[], overfetch: number, h3Field: string): Promise<PostDoc[]> {
   const db = getDb();
   try {
     const snap = await db
@@ -39,11 +106,10 @@ async function queryByH3Chunk(h3Chunk: string[], overfetch: number, h3Field: str
       .limit(overfetch)
       .get();
 
-    const out: PublicPost[] = [];
+    const out: PostDoc[] = [];
     for (const docSnap of snap.docs) {
       const data = docSnap.data() as PostDoc;
-      const pub = toPublicPost(data);
-      if (pub) out.push(pub);
+      out.push(data);
     }
     return out;
   } catch (err) {
@@ -60,8 +126,8 @@ async function queryInBatches(
   overfetch: number,
   h3Field: string,
   concurrency: number = 5
-): Promise<PublicPost[]> {
-  const results: PublicPost[] = [];
+): Promise<PostDoc[]> {
+  const results: PostDoc[] = [];
   
   for (let i = 0; i < chunks.length; i += concurrency) {
     const batch = chunks.slice(i, i + concurrency);
@@ -99,7 +165,7 @@ export function buildFeedRouter(): Router {
    * - h3r8: (deprecated) comma-separated H3 resolution 8 cells - mapped to h3_res7
    * - limit: 1..100
    *
-   * Returns full content; UI may choose to show a snippet.
+   * Returns full content with media URLs; UI may choose to show a snippet.
    */
   router.get(
     "/feed",
@@ -160,27 +226,45 @@ export function buildFeedRouter(): Router {
       }
 
       // Use batched queries with limited concurrency to avoid overwhelming Firestore
-      const results = await queryInBatches(chunks, overfetch, h3Field, 5);
+      const postDocs = await queryInBatches(chunks, overfetch, h3Field, 5);
       
-      // Deduplicate results
-      const merged: PublicPost[] = [];
+      // Deduplicate results by messageId
+      const deduped: PostDoc[] = [];
       const seen = new Set<string>();
-      for (const p of results) {
-        const key = `${p.username}:${p.messageId}:${p.time}`;
+      for (const doc of postDocs) {
+        const key = `${doc.username}:${doc.messageId}:${doc.time}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        merged.push(p);
+        deduped.push(doc);
       }
 
-      merged.sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : 0));
+      // Sort by time descending
+      deduped.sort((a, b) => (a.time < b.time ? 1 : a.time > b.time ? -1 : 0));
+      
+      // Take only what we need
+      const limitedDocs = deduped.slice(0, limit);
+      
+      // Collect mediaIds and batch-resolve media URLs
+      const mediaIds = limitedDocs
+        .filter(doc => doc.mediaId)
+        .map(doc => doc.mediaId as string);
+      
+      const mediaMap = await resolveMediaUrls(mediaIds);
+      
+      // Convert to PublicPost with media info
+      const posts: PublicPost[] = [];
+      for (const doc of limitedDocs) {
+        const mediaInfo = doc.mediaId ? mediaMap.get(doc.mediaId) : undefined;
+        const pub = toPublicPost(doc, mediaInfo);
+        if (pub) posts.push(pub);
+      }
 
       res.setHeader("Cache-Control", "public, max-age=10");
       return res.status(200).json({
-        posts: merged.slice(0, limit)
+        posts
       });
     })
   );
 
   return router;
 }
-

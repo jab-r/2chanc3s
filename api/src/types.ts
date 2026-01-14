@@ -5,6 +5,7 @@ export type PostDoc = {
   time: string;
   content: string;
   contentType?: string;
+  mediaId?: string | null;  // Reference to postMedia document
   geolocator?: {
     h3_res6?: string;   // ~36 km² metro-scale
     h3_res7?: string;   // ~5 km² district-scale
@@ -14,12 +15,23 @@ export type PostDoc = {
   geolocatorStatus?: "resolved" | "missing_device_location";
 };
 
+export type MediaInfo = {
+  type: 'image' | 'video';
+  thumbnail?: string;
+  medium?: string;
+  large?: string;
+  public?: string;
+  stream?: string;
+  duration?: number;
+};
+
 export type PublicPost = {
   username: string;
   messageId: string;
   time: string;
   content: string;
+  contentType?: string;
+  media?: MediaInfo;
   geolocatorH3?: string;
   accuracyM?: number;
 };
-

@@ -33,7 +33,7 @@ Additional simplification:
   messageId: string,
   time: string,                 // ISO timestamp (or serverTimestamp)
   content: string,
-  contentType: string,          // defaults to 'text/plain'
+  contentType: string,          // defaults to 'text/plain', or MIME type for media
 
   // Privacy-first derived location. Raw coordinates are NOT stored in the post.
   geolocator?: {
@@ -42,7 +42,10 @@ Additional simplification:
   } | null,
 
   locationSource?: 'device' | 'userProvided',
-  geolocatorStatus?: 'resolved' | 'missing_device_location'
+  geolocatorStatus?: 'resolved' | 'missing_device_location',
+
+  // Optional media attachment reference
+  mediaId?: string | null       // Reference to finalized media from postMedia collection
 }
 ```
 
@@ -61,19 +64,24 @@ Requires `Authorization: Bearer <token>`.
 {
   "message": "hello world",
   "messageId": "client-generated-id",
+  "username": "johndoe",
   "contentType": "text/plain",
-  "location": { "latitude": 40.7128, "longitude": -74.0060, "accuracyM": 25 }
+  "location": { "latitude": 40.7128, "longitude": -74.0060, "accuracyM": 25 },
+  "mediaId": "abc123-def456"
 }
 ```
 
 #### Fields
 - `message` (required): string content.
 - `messageId` (required): client-generated id for idempotency.
-- `username` client username to display post by and enable responding
-- `contentType` (optional): defaults to `text/plain`.
+- `username` (required): client username to display post by and enable responding.
+- `contentType` (optional): defaults to `text/plain`. Use MIME types like `image/jpeg` or `video/mp4` for media posts.
 - `location` (optional, nullable):
   - If omitted or `null`, derive geolocator from device last-known location stored by the location subsystem.
   - If provided, it must be `{ latitude, longitude, accuracyM? }` and the server derives geolocator from these coordinates.
+- `mediaId` (optional): reference to finalized media from `/v1/posts/media/finalize`. See [Post Media API](../loxation-server/docs/api/post-media.md).
+  - If provided, media must exist and be owned by the authenticated device.
+  - Media can be reused across multiple posts.
 
 ### Behavior
 - Stores/upserts in `posts` using document id `${deviceId}:${messageId}`.

@@ -70,9 +70,20 @@
         ·
         <a href="https://play.google.com/store/apps/details?id=com.jabresearch.loxation">Android</a>
       </div>
-      <div class="version">v2026.01.10.3</div>
+      <div class="version">v2026.01.10.4</div>
     </footer>
 
+    <!-- Lightbox for full-size media -->
+    <div id="lightbox" class="lightbox hidden">
+      <button class="lightbox-close" aria-label="Close">&times;</button>
+      <div class="lightbox-content">
+        <img id="lightbox-img" alt="Full size image" />
+        <video id="lightbox-video" controls playsinline></video>
+      </div>
+    </div>
+
+    <!-- HLS.js for video streaming (non-Safari browsers) -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
     <script type="module" src="/app.js"></script>
   </body>
 </html>

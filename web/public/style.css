@@ -125,3 +125,88 @@ input#address {
 
 .foot a { color: var(--accent); }
 
+/* Media in posts */
+.post-media {
+  margin: 0.75rem 0;
+  max-width: 100%;
+}
+
+.post-media img {
+  max-width: 100%;
+  max-height: 400px;
+  object-fit: contain;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #e8e4da;
+}
+
+.post-media img:hover {
+  opacity: 0.9;
+}
+
+.post-media video {
+  max-width: 100%;
+  max-height: 400px;
+  border-radius: 8px;
+  background: #000;
+}
+
+/* Lightbox overlay */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.95);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.lightbox.hidden {
+  display: none;
+}
+
+.lightbox-close {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  font-size: 2rem;
+  color: white;
+  background: none;
+  border: none;
+  cursor: pointer;
+  z-index: 1001;
+  padding: 0.5rem;
+  line-height: 1;
+}
+
+.lightbox-close:hover {
+  color: #ccc;
+}
+
+.lightbox-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lightbox-content img {
+  max-width: 95vw;
+  max-height: 95vh;
+  object-fit: contain;
+}
+
+.lightbox-content video {
+  max-width: 95vw;
+  max-height: 95vh;
+  display: none;
+}
+
+.lightbox-content img.hidden {
+  display: none;
+}
+
+.lightbox-content video.visible {
+  display: block;
+}
+
