@@ -1,12 +1,79 @@
 import { Router } from "express";
 import { getDb } from "../firestore.js";
-import type { PostDoc, PublicPost } from "../types.js";
+import type { PostDoc, PublicPost, MediaInfo } from "../types.js";
 import { asyncHandler } from "../util/http.js";
 import { clampInt, parseH3List } from "../util/h3.js";
 
 const POSTS_COLLECTION = "posts";
+const MEDIA_COLLECTION = "postMedia";
 
-function toPublicPost(doc: PostDoc): PublicPost | null {
+/**
+ * Media document structure from loxation-server postMedia collection
+ */
+type MediaDoc = {
+  mediaId: string;
+  type: 'image' | 'video';
+  publicUrl: string;
+  variants?: {
+    thumbnail?: string;
+    medium?: string;
+    large?: string;
+    public?: string;
+  };
+  thumbnail?: string;
+  iframe?: string;
+  status?: string;
+  duration?: number;
+};
+
+/**
+ * Resolve media URLs for a batch of mediaIds
+ */
+async function resolveMediaUrls(mediaIds: string[]): Promise<Map<string, MediaInfo>> {
+  const result = new Map<string, MediaInfo>();
+  if (mediaIds.length === 0) return result;
+
+  const db = getDb();
+  const uniqueIds = [...new Set(mediaIds.filter(Boolean))];
+  
+  if (uniqueIds.length === 0) return result;
+  
+  try {
+    const mediaRefs = uniqueIds.map(id => db.collection(MEDIA_COLLECTION).doc(id));
+    const snapshots = await db.getAll(...mediaRefs);
+    
+    for (let i = 0; i < snapshots.length; i++) {
+      const snap = snapshots[i];
+      if (!snap.exists) continue;
+      
+      const data = snap.data() as MediaDoc;
+      const docId = snap.id;
+      
+      if (data.type === 'image') {
+        result.set(docId, {
+          type: 'image',
+          thumbnail: data.variants?.thumbnail,
+          medium: data.variants?.medium,
+          large: data.variants?.large,
+          public: data.publicUrl || data.variants?.public,
+        });
+      } else if (data.type === 'video') {
+        result.set(docId, {
+          type: 'video',
+          thumbnail: data.thumbnail,
+          stream: data.publicUrl,
+          duration: data.duration,
+        });
+      }
+    }
+  } catch (err) {
+    console.error('[search resolveMediaUrls] Error resolving media URLs:', err);
+  }
+  
+  return result;
+}
+
+function toPublicPost(doc: PostDoc, mediaInfo?: MediaInfo): PublicPost | null {
   const username = typeof doc.username === "string" ? doc.username.trim() : "";
   if (!username) return null;
   if (typeof doc.messageId !== "string" || doc.messageId.trim() === "") return null;
@@ -18,7 +85,9 @@ function toPublicPost(doc: PostDoc): PublicPost | null {
     messageId: doc.messageId,
     time: doc.time,
     content: doc.content,
-    geolocatorH3: doc.geolocator?.h3_res7,  // h3 field removed, use h3_res7
+    contentType: doc.contentType || 'text/plain',
+    media: mediaInfo,
+    geolocatorH3: doc.geolocator?.h3_res7,
     accuracyM: doc.geolocator?.accuracyM
   };
 }
@@ -177,24 +246,45 @@ export function buildSearchRouter(): Router {
         return timeB.localeCompare(timeA);
       });
 
-      const matches: PublicPost[] = [];
+      // First pass: filter and deduplicate, collecting PostDocs
+      const matchedDocs: PostDoc[] = [];
       const seen = new Set<string>();
       for (const docSnap of candidates.docs) {
         const data = docSnap.data() as PostDoc;
-        const pub = toPublicPost(data);
-        if (!pub) continue;
+        
+        // Basic validation - must have username
+        const username = typeof data.username === "string" ? data.username.trim() : "";
+        if (!username) continue;
+        if (typeof data.messageId !== "string" || data.messageId.trim() === "") continue;
+        if (typeof data.time !== "string" || data.time.trim() === "") continue;
+        if (typeof data.content !== "string") continue;
 
         // For regular search (not @username), apply substring filter
         if (!isUsernameSearch) {
-          const hay = `${pub.username} ${pub.content}`.toLowerCase();
+          const hay = `${username} ${data.content}`.toLowerCase();
           if (!hay.includes(q)) continue;
         }
 
-        const key = `${pub.username}:${pub.messageId}:${pub.time}`;
+        const key = `${username}:${data.messageId}:${data.time}`;
         if (seen.has(key)) continue;
         seen.add(key);
-        matches.push(pub);
-        if (matches.length >= limit) break;
+        matchedDocs.push(data);
+        if (matchedDocs.length >= limit) break;
+      }
+
+      // Collect mediaIds and batch-resolve media URLs
+      const mediaIds = matchedDocs
+        .filter(doc => doc.mediaId)
+        .map(doc => doc.mediaId as string);
+      
+      const mediaMap = await resolveMediaUrls(mediaIds);
+
+      // Convert to PublicPost with media info
+      const matches: PublicPost[] = [];
+      for (const doc of matchedDocs) {
+        const mediaInfo = doc.mediaId ? mediaMap.get(doc.mediaId) : undefined;
+        const pub = toPublicPost(doc, mediaInfo);
+        if (pub) matches.push(pub);
       }
 
       res.setHeader("Cache-Control", "public, max-age=10");
