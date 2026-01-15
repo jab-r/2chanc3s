@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Reply in Loxation</title>
+    <!-- iOS Smart App Banner -->
+    <meta name="apple-itunes-app" content="app-id=6743818003" id="smartBanner" />
+    <style>
+      * { box-sizing: border-box; margin: 0; padding: 0; }
+      body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; display: flex; flex-direction: column; }
+      .wrap { max-width: 600px; margin: 2rem auto; padding: 1rem; }
+      .panel { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.1); text-align: center; }
+      h1 { margin-bottom: 0.5rem; }
+      .subtitle { color: #666; margin-bottom: 1.5rem; }
+      .mono { font-family: monospace; font-size: 0.85rem; background: #f0f0f0; padding: 0.75rem; border-radius: 6px; margin-bottom: 1rem; word-break: break-all; }
+      .btn { display: inline-block; background: #007aff; color: white; padding: 0.75rem 1.5rem; border-radius: 8px; text-decoration: none; font-weight: 500; margin: 0.5rem; }
+      .btn:hover { background: #0056b3; }
+      .store-badges { margin-top: 1.5rem; display: flex; gap: 0.75rem; align-items: center; justify-content: center; flex-wrap: wrap; }
+      .store-badges img { height: 40px; width: auto; }
+      .small { font-size: 0.85rem; color: #666; margin-top: 1rem; }
+      .loading { color: #666; }
+    </style>
+  </head>
+  <body>
+    <main class="wrap">
+      <section class="panel">
+        <h1>Reply in Loxation</h1>
+        <p class="subtitle">Private reply happens in the app</p>
+        
+        <div id="target" class="mono"></div>
+        
+        <div id="loading" class="loading">Opening app...</div>
+        
+        <div id="fallback" style="display: none;">
+          <a id="btnOpen" class="btn" href="#">Open in app</a>
+          
+          <div class="store-badges">
+            <span>Get Loxation:</span>
+            <a id="btnIos" href="https://apps.apple.com/us/app/loxation/id6743818003">
+              <img src="https://tools.applemediaservices.com/api/badges/download-on-the-app-store/black/en-us?size=250x83" alt="Download on the App Store">
+            </a>
+            <a id="btnAndroid" href="https://play.google.com/store/apps/details?id=com.jabresearch.loxation">
+              <img src="https://play.google.com/intl/en_us/badges/static/images/badges/en_badge_web_generic.png" alt="Get it on Google Play" style="height: 60px;">
+            </a>
+          </div>
+          
+          <p class="small">
+            If the app didn't open, tap "Open in app" or install from the store.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <script>
+      const params = new URLSearchParams(location.search);
+      const username = (params.get('username') || '').trim();
+      const messageId = (params.get('messageId') || '').trim();
+
+      // Display target info
+      const target = document.getElementById('target');
+      target.textContent = `@${username}  —  messageId: ${messageId}`;
+
+      // Build the deep link URL (same https URL - Universal Links should handle it)
+      const deepLinkUrl = location.href;
+      
+      // Update Smart App Banner with app-argument
+      const smartBanner = document.getElementById('smartBanner');
+      smartBanner.content = `app-id=6743818003, app-argument=${deepLinkUrl}`;
+
+      // Set up fallback buttons
+      const btnOpen = document.getElementById('btnOpen');
+      btnOpen.href = deepLinkUrl;
+
+      // Platform detection
+      const ua = navigator.userAgent || '';
+      const isAndroid = /Android/i.test(ua);
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+      
+      if (isAndroid && !isIOS) document.getElementById('btnIos').style.display = 'none';
+      if (isIOS && !isAndroid) document.getElementById('btnAndroid').style.display = 'none';
+
+      // Show fallback UI after a delay (if app didn't open, user will still be here)
+      setTimeout(() => {
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('fallback').style.display = 'block';
+      }, 1500);
+    </script>
+  </body>
+</html>

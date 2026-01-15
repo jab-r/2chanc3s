@@ -41,11 +41,23 @@ function fmtTime(iso) {
   }
 }
 
+// Reply URL for Android and desktop (same-domain, Android App Links work fine)
 function replyUrl(username, messageId) {
   const u = encodeURIComponent(username);
   const m = encodeURIComponent(messageId);
   return `https://www.2chanc3s.com/reply?username=${u}&messageId=${m}`;
 }
+
+// iOS reply URL - uses different domain to trigger Universal Links
+// (iOS blocks Universal Links for same-domain navigation)
+function replyUrlIOS(username, messageId) {
+  const u = encodeURIComponent(username);
+  const m = encodeURIComponent(messageId);
+  return `https://public.loxation.com/reply?username=${u}&messageId=${m}`;
+}
+
+// Platform detection
+const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
 /**
  * Render media element for a post
@@ -232,7 +244,7 @@ function renderPosts(posts) {
       ${renderMedia(p.media)}
       <div class="content" data-full="${escapeText(full)}" data-snippet="${escapeText(snippet)}">${escapeText(snippet)}</div>
       <div class="actions">
-        <a class="btn" href="${replyUrl(username, messageId)}">Reply (in app)</a>
+        <a class="btn" href="${isIOS ? replyUrlIOS(username, messageId) : replyUrl(username, messageId)}">Reply (in app)</a>
         ${hasMore && !hasMedia ? '<button class="btn toggle">Show full</button>' : ''}
       </div>
     `;

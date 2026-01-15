@@ -1,0 +1,14 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appID": "2TS8ML5579.com.jabresearch.loxation",
+        "paths": [
+          "/reply",
+          "/reply/*"
+        ]
+      }
+    ]
+  }
+}

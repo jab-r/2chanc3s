@@ -18,13 +18,19 @@
       <section class="panel">
         <div id="target" class="mono"></div>
         <div class="row">
-          <a id="btnOpen" class="btn" href="#">Open in app</a>
-          <a id="btnIos" class="btn" href="https://apps.apple.com/app/id6743818003">Install (iOS)</a>
-          <a id="btnAndroid" class="btn" href="https://play.google.com/store/apps/details?id=com.jabresearch.loxation">Install (Android)</a>
+          <a id="btnOpen" class="btn">Open in app</a>
+        </div>
+        <div class="store-badges" style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center; justify-content: center; flex-wrap: wrap;">
+          <span>Get Loxation:</span>
+          <a id="btnIos" href="https://apps.apple.com/us/app/loxation/id6743818003">
+            <img src="/Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg" alt="Download on the App Store" style="height: 40px; width: auto;">
+          </a>
+          <a id="btnAndroid" href="https://play.google.com/store/apps/details?id=com.jabresearch.loxation">
+            <img src="/GetItOnGooglePlay_Badge_Web_color_English.svg" alt="Get it on Google Play" style="height: 40px; width: auto;">
+          </a>
         </div>
         <p class="small">
           If the app is installed, tap "Open in app" or use the banner above.
-          On iOS you can also long-press the link and choose "Open in Loxation".
         </p>
       </section>
     </main>
@@ -39,14 +45,10 @@
 
       // Build custom URL scheme for direct app opening
       const customSchemeUrl = `loxation://reply?username=${encodeURIComponent(username)}&messageId=${encodeURIComponent(messageId)}`;
-      
+
       // Update Smart App Banner with app-argument to pass deep link data
       const smartBanner = document.getElementById('smartBanner');
       smartBanner.content = `app-id=6743818003, app-argument=${customSchemeUrl}`;
-
-      // "Open in app" button tries custom URL scheme first
-      const btnOpen = document.getElementById('btnOpen');
-      btnOpen.href = customSchemeUrl;
 
       // Basic platform hint: if on iOS hide Android and vice-versa.
       const ua = navigator.userAgent || '';
@@ -55,23 +57,14 @@
       if (isAndroid && !isIOS) document.getElementById('btnIos').style.display = 'none';
       if (isIOS && !isAndroid) document.getElementById('btnAndroid').style.display = 'none';
 
-      // On Android, also try intent:// scheme as fallback
-      if (isAndroid) {
-        const intentUrl = `intent://reply?username=${encodeURIComponent(username)}&messageId=${encodeURIComponent(messageId)}#Intent;scheme=loxation;package=com.jabresearch.loxation;end`;
-        btnOpen.href = intentUrl;
-      }
+      // "Open in app" button - use custom scheme (opens app directly)
+      const btnOpen = document.getElementById('btnOpen');
+      btnOpen.href = customSchemeUrl;
 
-      // Auto-attempt to open app on page load (works if coming from external link)
-      // Small delay to let page render first
-      if (username && messageId) {
-        setTimeout(() => {
-          // Try custom scheme - if app not installed, nothing happens (no error)
-          const iframe = document.createElement('iframe');
-          iframe.style.display = 'none';
-          iframe.src = customSchemeUrl;
-          document.body.appendChild(iframe);
-          setTimeout(() => iframe.remove(), 100);
-        }, 300);
+      // On Android, use intent:// scheme with fallback to Play Store
+      if (isAndroid) {
+        const intentUrl = `intent://reply?username=${encodeURIComponent(username)}&messageId=${encodeURIComponent(messageId)}#Intent;scheme=loxation;package=com.jabresearch.loxation;S.browser_fallback_url=https://play.google.com/store/apps/details?id=com.jabresearch.loxation;end`;
+        btnOpen.href = intentUrl;
       }
     </script>
   </body>

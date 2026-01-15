@@ -1,0 +1,10 @@
+/.well-known/apple-app-site-association
+  Content-Type: application/json
+  Cache-Control: public, max-age=300
+
+/reply*
+  Cache-Control: public, max-age=60
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
