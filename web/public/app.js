@@ -100,14 +100,17 @@ function renderMedia(media) {
     
     if (hasNativeHLS) {
       // Use <source> element with type for iOS/Safari native HLS
+      // Set src directly on video too for iOS to recognize it immediately
       return `
         <div class="post-media">
           <video
             id="${videoId}"
+            src="${escapeText(streamUrl)}"
             poster="${escapeText(posterUrl)}"
             controls
             playsinline
-            preload="auto"
+            preload="metadata"
+            webkit-playsinline="true"
           >
             <source src="${escapeText(streamUrl)}" type="application/vnd.apple.mpegurl">
             Your browser does not support video playback.
