@@ -93,24 +93,44 @@ function renderMedia(media) {
     // Generate unique ID for this video element
     const videoId = 'video-' + Math.random().toString(36).slice(2, 9);
     
-    // iOS Safari has native HLS support - set src directly for immediate playback
-    // Other browsers use HLS.js which we initialize on play event
-    const hasNativeHLS = isIOS || /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+    // iOS/Safari have native HLS - use <source> with type hint
+    // Other browsers use HLS.js initialized on play event
+    const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+    const hasNativeHLS = isIOS || isSafari;
     
-    return `
-      <div class="post-media">
-        <video
-          id="${videoId}"
-          poster="${escapeText(posterUrl)}"
-          controls
-          playsinline
-          preload="metadata"
-          ${hasNativeHLS ? `src="${escapeText(streamUrl)}"` : `data-stream="${escapeText(streamUrl)}"`}
-        >
-          Your browser does not support video playback.
-        </video>
-      </div>
-    `;
+    if (hasNativeHLS) {
+      // Use <source> element with type for iOS/Safari native HLS
+      return `
+        <div class="post-media">
+          <video
+            id="${videoId}"
+            poster="${escapeText(posterUrl)}"
+            controls
+            playsinline
+            preload="auto"
+          >
+            <source src="${escapeText(streamUrl)}" type="application/vnd.apple.mpegurl">
+            Your browser does not support video playback.
+          </video>
+        </div>
+      `;
+    } else {
+      // Use data-stream for HLS.js (Chrome, Firefox, etc.)
+      return `
+        <div class="post-media">
+          <video
+            id="${videoId}"
+            poster="${escapeText(posterUrl)}"
+            controls
+            playsinline
+            preload="none"
+            data-stream="${escapeText(streamUrl)}"
+          >
+            Your browser does not support video playback.
+          </video>
+        </div>
+      `;
+    }
   }
   
   return '';
