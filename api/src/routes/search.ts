@@ -59,6 +59,10 @@ export function buildSearchRouter(): Router {
         });
       }
 
+      // Detect @username search - query starts with @ followed by at least 1 character
+      const isUsernameSearch = q.startsWith('@') && q.length > 1;
+      const targetUsername = isUsernameSearch ? q.slice(1) : null;
+
       const limit = clampInt(req.query.limit, 50, 1, 100);
       const maxScan = clampInt(req.query.maxScan, 500, 50, 2000);
 
@@ -91,9 +95,50 @@ export function buildSearchRouter(): Router {
 
       const db = getDb();
 
-      let candidates: FirebaseFirestore.QuerySnapshot<FirebaseFirestore.DocumentData>;
-      if (all.length > 0) {
-        // If you pass H3 buckets, do a bounded multi-query similar to /feed but smaller scan.
+      let candidates: { docs: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>[] };
+      
+      if (isUsernameSearch && targetUsername) {
+        // @username search - use Firestore equality filter on username
+        if (all.length > 0) {
+          // With geo filter - use composite index: username + h3 + time
+          // Chunk H3 cells into groups of 10 (Firestore 'in' limit)
+          const chunks: string[][] = [];
+          for (let i = 0; i < all.length; i += 10) chunks.push(all.slice(i, i + 10));
+          
+          const docs: FirebaseFirestore.QueryDocumentSnapshot<FirebaseFirestore.DocumentData>[] = [];
+          const concurrency = 5;
+          for (let i = 0; i < chunks.length; i += concurrency) {
+            const batch = chunks.slice(i, i + concurrency);
+            try {
+              const snaps = await Promise.all(
+                batch.map((chunk) =>
+                  db
+                    .collection(POSTS_COLLECTION)
+                    .where("username", "==", targetUsername)
+                    .where(h3Field, "in", chunk)
+                    .orderBy("time", "desc")
+                    .limit(Math.ceil(maxScan / chunks.length))
+                    .get()
+                )
+              );
+              for (const s of snaps) docs.push(...s.docs);
+            } catch (err) {
+              console.error(`Firestore username+h3 search query error on ${h3Field}:`, err);
+            }
+          }
+          candidates = { docs };
+        } else {
+          // Global username search - no geo filter
+          const snap = await db
+            .collection(POSTS_COLLECTION)
+            .where("username", "==", targetUsername)
+            .orderBy("time", "desc")
+            .limit(maxScan)
+            .get();
+          candidates = { docs: snap.docs };
+        }
+      } else if (all.length > 0) {
+        // Regular substring search with H3 geo filter
         const chunks: string[][] = [];
         for (let i = 0; i < all.length; i += 10) chunks.push(all.slice(i, i + 10));
 
@@ -118,11 +163,19 @@ export function buildSearchRouter(): Router {
             console.error(`Firestore search query error on ${h3Field}:`, err);
           }
         }
-        // Fake a QuerySnapshot-like object for unified iteration.
-        candidates = { docs } as any;
+        candidates = { docs };
       } else {
-        candidates = await db.collection(POSTS_COLLECTION).orderBy("time", "desc").limit(maxScan).get();
+        // No geo filter - scan recent posts globally
+        const snap = await db.collection(POSTS_COLLECTION).orderBy("time", "desc").limit(maxScan).get();
+        candidates = { docs: snap.docs };
       }
+
+      // Sort all candidates by time descending (needed when merging multiple chunks)
+      candidates.docs.sort((a, b) => {
+        const timeA = a.data().time || "";
+        const timeB = b.data().time || "";
+        return timeB.localeCompare(timeA);
+      });
 
       const matches: PublicPost[] = [];
       const seen = new Set<string>();
@@ -131,8 +184,11 @@ export function buildSearchRouter(): Router {
         const pub = toPublicPost(data);
         if (!pub) continue;
 
-        const hay = `${pub.username} ${pub.content}`.toLowerCase();
-        if (!hay.includes(q)) continue;
+        // For regular search (not @username), apply substring filter
+        if (!isUsernameSearch) {
+          const hay = `${pub.username} ${pub.content}`.toLowerCase();
+          if (!hay.includes(q)) continue;
+        }
 
         const key = `${pub.username}:${pub.messageId}:${pub.time}`;
         if (seen.has(key)) continue;

@@ -9,20 +9,24 @@ const MEDIA_COLLECTION = "postMedia";
 
 /**
  * Media document structure from loxation-server postMedia collection
+ * Matches the structure created by POST /v1/posts/media/finalize
  */
 type MediaDoc = {
   mediaId: string;
   type: 'image' | 'video';
   publicUrl: string;
+  // Image fields
   variants?: {
     thumbnail?: string;
     medium?: string;
     large?: string;
     public?: string;
   };
-  thumbnail?: string;    // video thumbnail
-  streamUrl?: string;    // video HLS manifest
-  duration?: number;
+  // Video fields
+  thumbnail?: string;    // video thumbnail URL
+  iframe?: string;       // embeddable player URL
+  status?: string;       // video processing status
+  duration?: number;     // video duration in seconds
 };
 
 /**
@@ -38,17 +42,38 @@ async function resolveMediaUrls(mediaIds: string[]): Promise<Map<string, MediaIn
   
   if (uniqueIds.length === 0) return result;
   
+  console.log(`[resolveMediaUrls] Resolving ${uniqueIds.length} mediaIds:`, uniqueIds);
+  
   try {
     // Batch get all media docs
     const mediaRefs = uniqueIds.map(id => db.collection(MEDIA_COLLECTION).doc(id));
     const snapshots = await db.getAll(...mediaRefs);
     
-    for (const snap of snapshots) {
-      if (!snap.exists) continue;
+    console.log(`[resolveMediaUrls] Got ${snapshots.length} snapshots`);
+    
+    for (let i = 0; i < snapshots.length; i++) {
+      const snap = snapshots[i];
+      const requestedId = uniqueIds[i];
+      
+      if (!snap.exists) {
+        console.log(`[resolveMediaUrls] Media doc not found: ${requestedId}`);
+        continue;
+      }
+      
       const data = snap.data() as MediaDoc;
+      console.log(`[resolveMediaUrls] Found media doc:`, {
+        id: snap.id,
+        mediaId: data.mediaId,
+        type: data.type,
+        hasVariants: !!data.variants,
+        publicUrl: data.publicUrl?.substring(0, 50) + '...'
+      });
+      
+      // Use snap.id as the key since that's what we queried with
+      const docId = snap.id;
       
       if (data.type === 'image') {
-        result.set(data.mediaId, {
+        result.set(docId, {
           type: 'image',
           thumbnail: data.variants?.thumbnail,
           medium: data.variants?.medium,
@@ -56,16 +81,21 @@ async function resolveMediaUrls(mediaIds: string[]): Promise<Map<string, MediaIn
           public: data.publicUrl || data.variants?.public,
         });
       } else if (data.type === 'video') {
-        result.set(data.mediaId, {
+        // For videos, publicUrl contains the HLS manifest URL
+        result.set(docId, {
           type: 'video',
           thumbnail: data.thumbnail,
-          stream: data.streamUrl || data.publicUrl,
+          stream: data.publicUrl,  // HLS manifest URL
           duration: data.duration,
         });
+      } else {
+        console.log(`[resolveMediaUrls] Unknown media type: ${data.type}`);
       }
     }
+    
+    console.log(`[resolveMediaUrls] Resolved ${result.size} media items`);
   } catch (err) {
-    console.error('Error resolving media URLs:', err);
+    console.error('[resolveMediaUrls] Error resolving media URLs:', err);
   }
   
   return result;
@@ -244,10 +274,20 @@ export function buildFeedRouter(): Router {
       // Take only what we need
       const limitedDocs = deduped.slice(0, limit);
       
+      // Log posts with media for debugging
+      const postsWithMedia = limitedDocs.filter(doc => doc.mediaId);
+      console.log(`[feed] Found ${limitedDocs.length} posts, ${postsWithMedia.length} with mediaId`);
+      if (postsWithMedia.length > 0) {
+        console.log(`[feed] Posts with media:`, postsWithMedia.map(d => ({
+          username: d.username,
+          messageId: d.messageId,
+          mediaId: d.mediaId,
+          contentType: d.contentType
+        })));
+      }
+      
       // Collect mediaIds and batch-resolve media URLs
-      const mediaIds = limitedDocs
-        .filter(doc => doc.mediaId)
-        .map(doc => doc.mediaId as string);
+      const mediaIds = postsWithMedia.map(doc => doc.mediaId as string);
       
       const mediaMap = await resolveMediaUrls(mediaIds);
       
@@ -255,6 +295,9 @@ export function buildFeedRouter(): Router {
       const posts: PublicPost[] = [];
       for (const doc of limitedDocs) {
         const mediaInfo = doc.mediaId ? mediaMap.get(doc.mediaId) : undefined;
+        if (doc.mediaId && !mediaInfo) {
+          console.log(`[feed] WARNING: mediaId ${doc.mediaId} not found in mediaMap`);
+        }
         const pub = toPublicPost(doc, mediaInfo);
         if (pub) posts.push(pub);
       }

@@ -200,6 +200,19 @@ function renderPosts(posts) {
     return;
   }
 
+  // Debug: log posts with media
+  const postsWithMedia = posts.filter(p => p.media);
+  if (postsWithMedia.length > 0) {
+    console.log('[renderPosts] Posts with media:', postsWithMedia.map(p => ({
+      username: p.username,
+      messageId: p.messageId,
+      contentType: p.contentType,
+      media: p.media
+    })));
+  } else {
+    console.log('[renderPosts] No posts have media data');
+  }
+
   for (const p of posts) {
     const username = p.username;
     const messageId = p.messageId;
