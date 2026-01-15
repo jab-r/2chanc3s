@@ -93,15 +93,19 @@ function renderMedia(media) {
     // Generate unique ID for this video element
     const videoId = 'video-' + Math.random().toString(36).slice(2, 9);
     
+    // iOS Safari has native HLS support - set src directly for immediate playback
+    // Other browsers use HLS.js which we initialize on play event
+    const hasNativeHLS = isIOS || /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+    
     return `
       <div class="post-media">
-        <video 
+        <video
           id="${videoId}"
           poster="${escapeText(posterUrl)}"
           controls
           playsinline
-          preload="none"
-          data-stream="${escapeText(streamUrl)}"
+          preload="metadata"
+          ${hasNativeHLS ? `src="${escapeText(streamUrl)}"` : `data-stream="${escapeText(streamUrl)}"`}
         >
           Your browser does not support video playback.
         </video>
