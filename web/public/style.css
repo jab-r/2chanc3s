@@ -210,3 +210,32 @@ input#address {
   display: block;
 }
 
+/* Post map styles */
+.post-map-container {
+  margin: 0.75rem 0;
+  overflow: hidden;
+  max-height: 0;
+  transition: max-height 0.3s ease-out;
+}
+
+.post-map-container.expanded {
+  max-height: 300px;
+}
+
+.post-map {
+  height: 250px;
+  width: 100%;
+  border-radius: 8px;
+  background: #e0e0e0;
+}
+
+.btn-map {
+  font-size: 0.85rem;
+  padding: 0.3rem 0.6rem;
+}
+
+/* Ensure Leaflet container respects border-radius */
+.post-map .leaflet-container {
+  border-radius: 8px;
+}
+

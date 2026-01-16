@@ -1,4 +1,4 @@
-import { latLngToCell, gridDisk } from 'h3-js';
+import { latLngToCell, gridDisk, cellToBoundary, cellToLatLng } from 'h3-js';
 
 // Configure this to your Cloud Run URL, e.g. https://api-xxxxx-uc.a.run.app
 // If your Cloudflare Pages site proxies to the API, this can remain "".
@@ -232,6 +232,66 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeLightbox();
 });
 
+/**
+ * Initialize and render a map showing H3 cell and accuracy circle
+ * @param {HTMLElement} container - The map container element
+ * @param {string} h3Cell - H3 cell index (resolution 7)
+ * @param {number|undefined} accuracyM - Accuracy in meters
+ * @returns {Object} Leaflet map instance
+ */
+function initPostMap(container, h3Cell, accuracyM) {
+  // Get cell center for map centering
+  const [lat, lng] = cellToLatLng(h3Cell);
+  
+  // Get hexagon boundary vertices
+  // cellToBoundary returns [[lat, lng], ...] - array of vertex coordinates
+  const boundary = cellToBoundary(h3Cell);
+  
+  // Create map centered on cell
+  const map = L.map(container).setView([lat, lng], 13);
+  
+  // Add OpenStreetMap tiles
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '© <a href="https://openstreetmap.org/copyright">OSM</a>'
+  }).addTo(map);
+  
+  // Draw H3 hexagon
+  const hexagonStyle = {
+    color: '#007aff',
+    weight: 2,
+    fillColor: '#007aff',
+    fillOpacity: 0.15
+  };
+  const hexagon = L.polygon(boundary, hexagonStyle).addTo(map);
+  
+  // Draw accuracy circle if available
+  if (accuracyM && accuracyM > 0) {
+    const circleStyle = {
+      color: '#ff6b6b',
+      weight: 2,
+      fillColor: '#ff6b6b',
+      fillOpacity: 0.1,
+      dashArray: '5, 5'
+    };
+    L.circle([lat, lng], {
+      radius: accuracyM,
+      ...circleStyle
+    }).addTo(map);
+  }
+  
+  // Fit bounds to show hexagon (and circle if present)
+  const bounds = hexagon.getBounds();
+  if (accuracyM && accuracyM > 0) {
+    // Extend bounds to include accuracy circle
+    const circleBounds = L.latLng(lat, lng).toBounds(accuracyM * 2);
+    bounds.extend(circleBounds);
+  }
+  map.fitBounds(bounds, { padding: [20, 20] });
+  
+  return map;
+}
+
 function renderPosts(posts) {
   listEl.innerHTML = '';
   if (!posts || posts.length === 0) {
@@ -259,6 +319,7 @@ function renderPosts(posts) {
     const snippet = full.length > 240 ? full.slice(0, 240) + '…' : full;
     const hasMore = full.length > snippet.length;
     const hasMedia = p.media && (p.media.type === 'image' || p.media.type === 'video');
+    const hasLocation = p.geolocatorH3;
 
     const el = document.createElement('div');
     el.className = 'post';
@@ -273,7 +334,9 @@ function renderPosts(posts) {
       <div class="actions">
         <a class="btn" href="${isIOS ? replyUrlIOS(username, messageId) : replyUrl(username, messageId)}">Reply (in app)</a>
         ${hasMore && !hasMedia ? '<button class="btn toggle">Show full</button>' : ''}
+        ${hasLocation ? `<button class="btn btn-map" data-h3="${escapeText(p.geolocatorH3)}" data-accuracy="${p.accuracyM || ''}">Show on map</button>` : ''}
       </div>
+      ${hasLocation ? '<div class="post-map-container"><div class="post-map"></div></div>' : ''}
     `;
     
     // Toggle button for text content
@@ -290,6 +353,36 @@ function renderPosts(posts) {
           contentEl.textContent = contentEl.dataset.full;
           toggle.textContent = 'Show less';
           toggle.dataset.mode = 'full';
+        }
+      });
+    }
+    
+    // Map toggle button
+    const mapBtn = el.querySelector('.btn-map');
+    if (mapBtn) {
+      mapBtn.addEventListener('click', () => {
+        const container = el.querySelector('.post-map-container');
+        const mapDiv = el.querySelector('.post-map');
+        const isExpanded = container.classList.contains('expanded');
+        
+        if (isExpanded) {
+          container.classList.remove('expanded');
+          mapBtn.textContent = 'Show on map';
+        } else {
+          container.classList.add('expanded');
+          mapBtn.textContent = 'Hide map';
+          
+          // Lazy init map on first expand
+          if (!mapDiv.dataset.initialized) {
+            const h3Cell = mapBtn.dataset.h3;
+            const accuracy = mapBtn.dataset.accuracy ? parseFloat(mapBtn.dataset.accuracy) : undefined;
+            
+            // Small delay to let CSS transition start and container have dimensions
+            setTimeout(() => {
+              initPostMap(mapDiv, h3Cell, accuracy);
+              mapDiv.dataset.initialized = 'true';
+            }, 50);
+          }
         }
       });
     }
