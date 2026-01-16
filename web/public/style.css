@@ -15,6 +15,8 @@ body {
 }
 
 .top {
+  width: 100%;
+  box-sizing: border-box;
   border-bottom: 1px solid var(--line);
   padding: 14px 16px;
   background: var(--paper);
@@ -22,6 +24,9 @@ body {
   justify-content: space-between;
   align-items: center;
   gap: 16px;
+  /* iOS Safari safe area support */
+  padding-left: max(16px, env(safe-area-inset-left));
+  padding-right: max(16px, env(safe-area-inset-right));
 }
 
 .header-main {
