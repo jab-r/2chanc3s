@@ -151,6 +151,35 @@ input#address {
   background: #000;
 }
 
+/* Video container with unmute button overlay */
+.video-container {
+  position: relative;
+  display: inline-block;
+}
+
+.unmute-btn {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  transition: background 0.2s;
+}
+
+.unmute-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: transparent;
+}
+
 /* Lightbox overlay */
 .lightbox {
   position: fixed;

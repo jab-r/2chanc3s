@@ -100,37 +100,44 @@ function renderMedia(media) {
     
     if (hasNativeHLS) {
       // Use <source> element with type for iOS/Safari native HLS
-      // Set src directly on video too for iOS to recognize it immediately
+      // muted for autoplay; user can tap unmute button to enable sound
       return `
-        <div class="post-media">
+        <div class="post-media video-container">
           <video
             id="${videoId}"
             src="${escapeText(streamUrl)}"
             poster="${escapeText(posterUrl)}"
             controls
             playsinline
+            muted
+            loop
             preload="metadata"
             webkit-playsinline="true"
           >
             <source src="${escapeText(streamUrl)}" type="application/vnd.apple.mpegurl">
             Your browser does not support video playback.
           </video>
+          <button class="unmute-btn" aria-label="Unmute">🔇</button>
         </div>
       `;
     } else {
       // Use data-stream for HLS.js (Chrome, Firefox, etc.)
+      // muted for autoplay; user can tap unmute button to enable sound
       return `
-        <div class="post-media">
+        <div class="post-media video-container">
           <video
             id="${videoId}"
             poster="${escapeText(posterUrl)}"
             controls
             playsinline
+            muted
+            loop
             preload="none"
             data-stream="${escapeText(streamUrl)}"
           >
             Your browser does not support video playback.
           </video>
+          <button class="unmute-btn" aria-label="Unmute">🔇</button>
         </div>
       `;
     }
@@ -147,23 +154,31 @@ function initVideoPlayer(videoEl) {
   const streamUrl = videoEl.dataset.stream;
   if (!streamUrl) return;
   
-  // Only initialize when video starts playing
+  // Only initialize once
   if (videoEl._hlsInitialized) return;
+  videoEl._hlsInitialized = true;
   
   if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
     // Native HLS support (Safari, iOS)
     videoEl.src = streamUrl;
+    videoEl.play().catch(() => {});
   } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
-    // Use HLS.js for other browsers
+    // Use HLS.js for other browsers (Chrome, Firefox, Edge)
     const hls = new Hls();
     hls.loadSource(streamUrl);
     hls.attachMedia(videoEl);
+    // Auto-play when manifest is ready (user already clicked play)
+    hls.on(Hls.Events.MANIFEST_PARSED, () => {
+      videoEl.play().catch(err => console.log('[HLS] Play failed:', err));
+    });
+    hls.on(Hls.Events.ERROR, (event, data) => {
+      console.error('[HLS] Error:', data.type, data.details);
+    });
   } else {
     // Fallback - try direct source (may not work for HLS)
     videoEl.src = streamUrl;
+    videoEl.play().catch(() => {});
   }
-  
-  videoEl._hlsInitialized = true;
 }
 
 /**
@@ -390,10 +405,73 @@ function renderPosts(posts) {
     listEl.appendChild(el);
   }
   
-  // Initialize video players after DOM is updated
-  // Use play event to lazy-load HLS streams
-  document.querySelectorAll('.post-media video[data-stream]').forEach(videoEl => {
-    videoEl.addEventListener('play', () => initVideoPlayer(videoEl), { once: true });
+  // Setup unmute buttons
+  document.querySelectorAll('.unmute-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const video = btn.parentElement.querySelector('video');
+      if (video) {
+        video.muted = !video.muted;
+        btn.textContent = video.muted ? '🔇' : '🔊';
+        btn.setAttribute('aria-label', video.muted ? 'Unmute' : 'Mute');
+      }
+    });
+  });
+  
+  // Setup IntersectionObserver for autoplay when videos scroll into view
+  setupVideoAutoplay();
+}
+
+// Global user sound preference (persists for session)
+let userWantsSound = false;
+
+/**
+ * Setup IntersectionObserver for video autoplay on scroll
+ * Videos autoplay muted when 50% visible, pause when out of view
+ */
+function setupVideoAutoplay() {
+  const videos = document.querySelectorAll('.post-media video');
+  if (videos.length === 0) return;
+  
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      const video = entry.target;
+      const container = video.closest('.video-container');
+      const unmuteBtn = container?.querySelector('.unmute-btn');
+      
+      if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+        // Video is visible - initialize HLS if needed and play
+        if (video.dataset.stream && !video._hlsInitialized) {
+          initVideoPlayer(video);
+        }
+        video.play().catch(() => {});
+        
+        // Apply user's sound preference
+        if (userWantsSound) {
+          video.muted = false;
+          if (unmuteBtn) {
+            unmuteBtn.textContent = '🔊';
+            unmuteBtn.setAttribute('aria-label', 'Mute');
+          }
+        }
+      } else {
+        // Video is out of view - pause to save resources
+        video.pause();
+      }
+    });
+  }, {
+    threshold: 0.5 // Trigger when 50% of video is visible
+  });
+  
+  videos.forEach(video => {
+    observer.observe(video);
+    
+    // Track when user manually unmutes
+    video.addEventListener('volumechange', () => {
+      if (!video.muted) {
+        userWantsSound = true;
+      }
+    });
   });
 }
 
