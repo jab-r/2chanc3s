@@ -9,6 +9,35 @@
 /reply*
   Cache-Control: public, max-age=60
 
+# Favicon and icons - cache for 1 week
+/favicon.svg
+  Cache-Control: public, max-age=604800
+
+/favicon.ico
+  Cache-Control: public, max-age=604800
+
+/favicon-*.png
+  Cache-Control: public, max-age=604800
+
+/apple-touch-icon.png
+  Cache-Control: public, max-age=604800
+
+# OG Image - cache for 1 week
+/og-image.svg
+  Cache-Control: public, max-age=604800
+
+/og-image.png
+  Cache-Control: public, max-age=604800
+
+# robots.txt and sitemap
+/robots.txt
+  Content-Type: text/plain
+  Cache-Control: public, max-age=86400
+
+/sitemap.xml
+  Content-Type: application/xml
+  Cache-Control: public, max-age=86400
+
 /*
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer

@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#007aff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0055cc;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)"/>
+  
+  <!-- Large stylized "2" as background element (faded) -->
+  <g transform="translate(650, 80) scale(1.5)" opacity="0.15">
+    <path fill="white" d="M3.1,76.16c-.76-12.51,3.05-24.72,9.8-35.2s16.51-19.4,27.49-25.59c12.77-7.2,27.44-10.74,41.97-11.91,15.36-1.24,30.83.05,46.01,2.52,12.46,2.03,25.17,4.85,36.26,11.11,5.2,2.93,9.94,6.65,13.69,11.31,4.45,5.52,7.04,12.24,8.24,19.18,2.58,14.96-.77,30.49-6.18,44.46s-13.68,28.03-21.75,41.32c-8.6,14.18-17.54,28.16-26.8,41.91-7.22,10.72-15.14,21.71-25.91,29.15-5.09,3.51-10.8,6.1-16.95,7.01s-12.06.01-17.57-2.36c-11.17-4.8-19.83-15.01-23.6-26.47-4.38-13.3-2.12-28.07,3.36-40.7s14.34-24.54,25.31-33.18c5.26-4.14,11.21-7.55,17.6-9.6,6.9-2.21,14.21-2.73,21.37-1.68,15.25,2.23,28.96,10.23,41.95,18.05s26.17,16.11,38.69,25,24.51,18.48,35.56,29.13c10.38,10,19.86,20.94,27.94,32.89s14.51,24.3,19.1,37.66c2.23,6.5,3.98,13.16,5.21,19.92.35,1.9,3.24,1.09,2.89-.8-2.62-14.4-7.65-28.28-14.42-41.25s-15.27-25.04-24.86-36.09c-10.16-11.7-21.61-22.24-33.72-31.88s-25.37-18.75-38.7-27.19c-6.68-4.23-13.42-8.36-20.22-12.38s-14-7.96-21.45-11.02-14.78-5.06-22.57-5.48c-7.24-.39-14.51.83-21.22,3.57-13.08,5.33-23.75,15.38-31.88,26.74-8.54,11.94-14.58,26.19-15.18,40.99-.55,13.49,3.99,26.6,13.34,36.43,8.76,9.2,21.11,14.52,33.87,12.6s23.75-10.94,32.09-20.67c4.41-5.14,8.37-10.66,12.15-16.27,4.84-7.18,9.59-14.41,14.25-21.71,8.95-14,17.86-28.13,25.68-42.8,7.39-13.85,13.65-28.59,15.72-44.26,1.94-14.69.29-30.64-9.34-42.49-8.09-9.96-20.32-15.55-32.39-19.01-6.45-1.85-13.04-3.12-19.66-4.18-7.82-1.25-15.69-2.19-23.59-2.65-15.7-.91-31.71.1-46.85,4.59-13.25,3.93-25.47,10.6-35.53,20.13C12.93,33.91,5.49,45.17,2.06,57.7.41,63.7-.27,69.96.1,76.16c.12,1.92,3.12,1.93,3,0h0Z"/>
+  </g>
+  
+  <!-- Main title -->
+  <text x="100" y="260" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="96" font-weight="bold" fill="white">2chanc3s</text>
+  
+  <!-- Tagline -->
+  <text x="100" y="340" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="36" fill="rgba(255,255,255,0.9)">second chances (nearby)</text>
+  
+  <!-- Description -->
+  <text x="100" y="420" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="26" fill="rgba(255,255,255,0.75)">Find missed connections and reconnect with</text>
+  <text x="100" y="455" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="26" fill="rgba(255,255,255,0.75)">people you've crossed paths with</text>
+  
+  <!-- App store hint -->
+  <text x="100" y="550" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="22" fill="rgba(255,255,255,0.6)">Available on iOS &amp; Android</text>
+</svg>

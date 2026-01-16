@@ -1,0 +1,10 @@
+# robots.txt for 2chanc3s
+User-agent: *
+Allow: /
+Disallow: /reply
+
+# Sitemap location
+Sitemap: https://www.2chanc3s.com/sitemap.xml
+
+# Crawl-delay (optional, be polite to servers)
+Crawl-delay: 1
