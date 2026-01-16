@@ -152,32 +152,77 @@ function renderMedia(media) {
  */
 function initVideoPlayer(videoEl) {
   const streamUrl = videoEl.dataset.stream;
-  if (!streamUrl) return;
+  if (!streamUrl) {
+    console.warn('[initVideoPlayer] No stream URL found');
+    return;
+  }
   
   // Only initialize once
-  if (videoEl._hlsInitialized) return;
+  if (videoEl._hlsInitialized) {
+    console.log('[initVideoPlayer] Already initialized, skipping');
+    return;
+  }
   videoEl._hlsInitialized = true;
+  
+  console.log('[initVideoPlayer] Initializing video:', streamUrl.substring(0, 50) + '...');
+  console.log('[initVideoPlayer] canPlayType HLS:', videoEl.canPlayType('application/vnd.apple.mpegurl'));
+  console.log('[initVideoPlayer] Hls available:', typeof Hls !== 'undefined');
+  console.log('[initVideoPlayer] Hls.isSupported:', typeof Hls !== 'undefined' && Hls.isSupported());
   
   if (videoEl.canPlayType('application/vnd.apple.mpegurl')) {
     // Native HLS support (Safari, iOS)
+    console.log('[initVideoPlayer] Using native HLS');
     videoEl.src = streamUrl;
-    videoEl.play().catch(() => {});
+    videoEl.play().catch((err) => console.log('[initVideoPlayer] Native play error:', err.message));
   } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
     // Use HLS.js for other browsers (Chrome, Firefox, Edge)
-    const hls = new Hls();
+    console.log('[initVideoPlayer] Using HLS.js');
+    const hls = new Hls({
+      debug: false,
+      enableWorker: true,
+      lowLatencyMode: false
+    });
+    
+    // Store reference for cleanup
+    videoEl._hls = hls;
+    
     hls.loadSource(streamUrl);
     hls.attachMedia(videoEl);
-    // Auto-play when manifest is ready (user already clicked play)
-    hls.on(Hls.Events.MANIFEST_PARSED, () => {
-      videoEl.play().catch(err => console.log('[HLS] Play failed:', err));
+    
+    // Auto-play when manifest is ready
+    hls.on(Hls.Events.MANIFEST_PARSED, (event, data) => {
+      console.log('[HLS] Manifest parsed, levels:', data.levels?.length);
+      videoEl.play().catch(err => console.log('[HLS] Play failed:', err.message));
     });
+    
+    hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+      console.log('[HLS] Media attached');
+    });
+    
     hls.on(Hls.Events.ERROR, (event, data) => {
-      console.error('[HLS] Error:', data.type, data.details);
+      console.error('[HLS] Error:', data.type, data.details, data.fatal ? '(FATAL)' : '');
+      if (data.fatal) {
+        switch (data.type) {
+          case Hls.ErrorTypes.NETWORK_ERROR:
+            console.log('[HLS] Trying to recover from network error...');
+            hls.startLoad();
+            break;
+          case Hls.ErrorTypes.MEDIA_ERROR:
+            console.log('[HLS] Trying to recover from media error...');
+            hls.recoverMediaError();
+            break;
+          default:
+            console.error('[HLS] Fatal error, cannot recover');
+            hls.destroy();
+            break;
+        }
+      }
     });
   } else {
-    // Fallback - try direct source (may not work for HLS)
+    // Fallback - try direct source (may not work for HLS streams)
+    console.warn('[initVideoPlayer] No HLS support, trying direct playback');
     videoEl.src = streamUrl;
-    videoEl.play().catch(() => {});
+    videoEl.play().catch((err) => console.log('[initVideoPlayer] Direct play error:', err.message));
   }
 }
 
@@ -442,9 +487,12 @@ function setupVideoAutoplay() {
       if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
         // Video is visible - initialize HLS if needed and play
         if (video.dataset.stream && !video._hlsInitialized) {
+          // Chrome/Firefox: HLS.js needed - it will call play() when ready
           initVideoPlayer(video);
+        } else if (video.src) {
+          // Safari/iOS: native HLS - can play directly
+          video.play().catch((err) => console.log('[Video] Native play failed:', err.message));
         }
-        video.play().catch(() => {});
         
         // Apply user's sound preference
         if (userWantsSound) {
