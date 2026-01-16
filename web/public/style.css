@@ -21,8 +21,11 @@ body {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
+  gap: 16px;
+}
+
+.header-main {
+  flex-shrink: 0;
 }
 
 .header-main h1 {
@@ -44,7 +47,19 @@ body {
 /* Navigation */
 .nav {
   display: flex;
-  gap: 16px;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+/* Mobile: stack header on small screens */
+@media (max-width: 480px) {
+  .top {
+    flex-wrap: wrap;
+  }
+  .nav {
+    width: 100%;
+    justify-content: flex-start;
+  }
 }
 
 .nav a {
