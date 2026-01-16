@@ -476,7 +476,12 @@ let userWantsSound = false;
  */
 function setupVideoAutoplay() {
   const videos = document.querySelectorAll('.post-media video');
+  console.log('[setupVideoAutoplay] Found videos:', videos.length);
   if (videos.length === 0) return;
+  
+  videos.forEach((v, i) => {
+    console.log(`[setupVideoAutoplay] Video ${i}: id=${v.id}, src=${v.src || 'none'}, data-stream=${v.dataset.stream?.substring(0, 50) || 'none'}`);
+  });
   
   const observer = new IntersectionObserver((entries) => {
     entries.forEach(entry => {
@@ -484,13 +489,19 @@ function setupVideoAutoplay() {
       const container = video.closest('.video-container');
       const unmuteBtn = container?.querySelector('.unmute-btn');
       
+      console.log(`[IntersectionObserver] Video ${video.id}: isIntersecting=${entry.isIntersecting}, ratio=${entry.intersectionRatio.toFixed(2)}`);
+      
       if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
+        console.log(`[IntersectionObserver] Video ${video.id} is visible, data-stream=${!!video.dataset.stream}, initialized=${!!video._hlsInitialized}, src=${!!video.src}`);
+        
         // Video is visible - initialize HLS if needed and play
         if (video.dataset.stream && !video._hlsInitialized) {
           // Chrome/Firefox: HLS.js needed - it will call play() when ready
+          console.log(`[IntersectionObserver] Calling initVideoPlayer for ${video.id}`);
           initVideoPlayer(video);
         } else if (video.src) {
           // Safari/iOS: native HLS - can play directly
+          console.log(`[IntersectionObserver] Playing native video ${video.id}`);
           video.play().catch((err) => console.log('[Video] Native play failed:', err.message));
         }
         
