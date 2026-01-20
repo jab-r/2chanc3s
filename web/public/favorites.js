@@ -227,14 +227,15 @@ async function initVideoPlayer(videoEl) {
   const mediaId = videoEl.dataset.mediaId;
   let streamUrl = videoEl.dataset.stream;
   
-  // For live streams, we need to fetch the actual streaming URL
+  // For live streams, we need to fetch the actual streaming URL from the loxation API
   if (isLive && mediaId) {
     console.log('[initVideoPlayer] Live stream detected, fetching streaming URL for mediaId:', mediaId);
     const container = videoEl.closest('.live-container');
     const badge = container?.querySelector('.live-badge');
     
     try {
-      const response = await fetch(`/v1/posts/media/${mediaId}/streaming-url`);
+      // The streaming-url endpoint is on the loxation API server
+      const response = await fetch(`https://api.loxation.com/v1/posts/media/${mediaId}/streaming-url`);
       const data = await response.json();
       
       console.log('[initVideoPlayer] Streaming URL response:', data);
