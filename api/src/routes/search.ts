@@ -66,11 +66,11 @@ async function resolveMediaUrls(mediaIds: string[]): Promise<Map<string, MediaIn
           duration: data.duration,
         });
       } else if (data.type === 'live') {
-        // For live streams, publicUrl contains the HLS manifest URL
+        // For live streams, frontend must call /v1/posts/media/:mediaId/streaming-url
+        // The stored publicUrl uses Live Input UID which doesn't work for playback
         result.set(docId, {
           type: 'live',
-          stream: data.publicUrl,  // HLS manifest URL
-          iframe: data.iframe,     // Embeddable player URL
+          mediaId: docId,          // Required: frontend calls /streaming-url with this
           status: data.status as 'created' | 'live' | 'ended',
           title: data.title,
         });

@@ -226,6 +226,72 @@ type LiveStatus = 'created' | 'live' | 'ended';
 
 ## Live Streaming
 
+### Important: Live Input UID vs Video Output UID
+
+When working with Cloudflare Stream Live, it's critical to understand the difference between two UIDs:
+
+| UID Type | Description | Used For |
+|----------|-------------|----------|
+| **Live Input UID** | Static ID created when you set up the stream | Ingest (RTMPS/WebRTC), stored as `mediaId` |
+| **Video Output UID** | Dynamic ID created each time a broadcast starts | **Playback (HLS)** |
+
+When `recording.mode: 'automatic'` is enabled (our default), Cloudflare creates a **new Video Output UID** each time a broadcast starts. The `publicUrl` initially stored uses the Live Input UID, but browsers need the Video Output UID for playback.
+
+**Solution:** Use the `/streaming-url` endpoint (see below) to get the correct playback URL.
+
+### GET /v1/posts/media/:mediaId/streaming-url
+
+**Get the current playback URL for a live stream.** This endpoint fetches the actual Video Output UID from Cloudflare and returns the correct HLS URL that browsers can play.
+
+**No authentication required** - this is a public endpoint for viewers.
+
+**Query Parameters:**
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `refresh` | boolean | Optional. Set to `true` to force a fresh fetch from Cloudflare (bypasses 30-second cache) |
+
+**Response (Active/Recent Broadcast):**
+```json
+{
+  "mediaId": "live-input-uid",
+  "streamingUrl": "https://customer-xxx.cloudflarestream.com/<video-output-uid>/manifest/video.m3u8",
+  "iframeUrl": "https://customer-xxx.cloudflarestream.com/<video-output-uid>/iframe",
+  "videoId": "<video-output-uid>",
+  "status": "live-inprogress",
+  "type": "live",
+  "cached": false
+}
+```
+
+**Response (Cached - within 30 seconds of last fetch):**
+```json
+{
+  "mediaId": "live-input-uid",
+  "streamingUrl": "https://customer-xxx.cloudflarestream.com/<video-output-uid>/manifest/video.m3u8",
+  "videoId": "<video-output-uid>",
+  "status": "live-inprogress",
+  "type": "live",
+  "cached": true,
+  "cacheAge": 15
+}
+```
+
+**Response (No Broadcast):**
+```json
+{
+  "mediaId": "live-input-uid",
+  "streamingUrl": null,
+  "status": "no_broadcast",
+  "message": "No active or recent broadcast found for this live input. Start broadcasting first."
+}
+```
+
+**Status Values:**
+- `live-inprogress` - Broadcast is currently live
+- `ready` - Broadcast ended, recording is available as VOD
+- `pendingupload` - Recording is processing
+- `no_broadcast` - No broadcast has started yet
+
 ### Ingest Protocols
 
 Live streams support two ingest protocols:
@@ -237,8 +303,17 @@ Live streams support two ingest protocols:
 
 ### Playback
 
-Viewers receive the HLS playback URL (`playbackUrl` in the response). The playback URL format:
-- `https://customer-xxx.cloudflarestream.com/{liveInputId}/manifest/video.m3u8`
+**⚠️ Important:** Do NOT use the `publicUrl` stored in the document for live playback. Instead, call the `/streaming-url` endpoint to get the correct playback URL.
+
+```typescript
+// Correct way to get live stream playback URL
+const response = await fetch(`/v1/posts/media/${mediaId}/streaming-url`);
+const data = await response.json();
+const hlsUrl = data.streamingUrl;  // Use this for playback
+```
+
+The playback URL format uses the **Video Output UID** (not the Live Input UID):
+- `https://customer-xxx.cloudflarestream.com/{videoOutputUid}/manifest/video.m3u8`
 
 Content-Types for playback:
 - **HLS Manifest:** `application/vnd.apple.mpegurl`
@@ -265,18 +340,28 @@ let playbackUrl = response.playbackUrl
 ### Example: Watching a Live Stream
 
 ```typescript
-// Using HLS.js (web)
+// Step 1: Get the correct streaming URL (NOT publicUrl from postMedia document!)
+const response = await fetch(`/v1/posts/media/${mediaId}/streaming-url`);
+const data = await response.json();
+
+if (!data.streamingUrl) {
+  // No active broadcast
+  showWaitingMessage(data.message);
+  return;
+}
+
+// Step 2: Play with HLS.js (web)
 import Hls from 'hls.js';
 
-const video = document.getElementById('video');
+const video = document.getElementById('video') as HTMLVideoElement;
 if (Hls.isSupported()) {
   const hls = new Hls();
-  hls.loadSource(liveData.publicUrl);  // HLS manifest URL
+  hls.loadSource(data.streamingUrl);  // Correct Video Output UID URL
   hls.attachMedia(video);
 }
 
-// Native iOS/macOS - use AVPlayer with the HLS URL
-// Native Android - use ExoPlayer with the HLS URL
+// Native iOS/macOS - use AVPlayer with data.streamingUrl
+// Native Android - use ExoPlayer with data.streamingUrl
 ```
 
 ---

@@ -144,67 +144,36 @@ function renderMedia(media) {
   }
   
   if (media.type === 'live') {
-    const streamUrl = media.stream;
+    const mediaId = media.mediaId;
     const title = media.title || 'Live Stream';
-    const status = media.status || 'live';
     
-    if (!streamUrl) return '';
+    if (!mediaId) return '';
     
     // Generate unique ID for this video element
     const videoId = 'live-' + Math.random().toString(36).slice(2, 9);
     
-    // Status badge - different styling based on stream state
-    let statusBadge;
-    if (status === 'live') {
-      statusBadge = '<span class="live-badge">🔴 LIVE</span>';
-    } else if (status === 'ended') {
-      statusBadge = '<span class="live-badge ended">Stream ended</span>';
-    } else {
-      statusBadge = '<span class="live-badge waiting">Starting soon...</span>';
-    }
+    // Status badge - will be updated after fetching streaming URL
+    const statusBadge = '<span class="live-badge loading">Loading...</span>';
     
-    // iOS/Safari have native HLS
-    const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
-    const hasNativeHLS = isIOS || isSafari;
-    
-    if (hasNativeHLS) {
-      return `
-        <div class="post-media video-container live-container">
-          ${statusBadge}
-          <video
-            id="${videoId}"
-            src="${escapeText(streamUrl)}"
-            controls
-            playsinline
-            muted
-            preload="metadata"
-            webkit-playsinline="true"
-          >
-            <source src="${escapeText(streamUrl)}" type="application/vnd.apple.mpegurl">
-            Your browser does not support live playback.
-          </video>
-          <button class="unmute-btn" aria-label="Unmute">🔇</button>
-        </div>
-      `;
-    } else {
-      return `
-        <div class="post-media video-container live-container">
-          ${statusBadge}
-          <video
-            id="${videoId}"
-            controls
-            playsinline
-            muted
-            preload="none"
-            data-stream="${escapeText(streamUrl)}"
-            data-live="true"
-          >
-            Your browser does not support live playback.
-          </video>
-          <button class="unmute-btn" aria-label="Unmute">🔇</button>
-        </div>
-      `;
-    }
+    // For live streams, we must call /v1/posts/media/:mediaId/streaming-url to get the correct URL
+    // Store mediaId as data attribute for initVideoPlayer to use
+    return `
+      <div class="post-media video-container live-container">
+        ${statusBadge}
+        <video
+          id="${videoId}"
+          controls
+          playsinline
+          muted
+          preload="none"
+          data-media-id="${escapeText(mediaId)}"
+          data-live="true"
+        >
+          Your browser does not support live playback.
+        </video>
+        <button class="unmute-btn" aria-label="Unmute">🔇</button>
+      </div>
+    `;
   }
   
   return '';
@@ -212,21 +181,75 @@ function renderMedia(media) {
 
 /**
  * Initialize HLS for a video element
+ * For live streams, fetches the streaming URL from /v1/posts/media/:mediaId/streaming-url first
  * @param {HTMLVideoElement} videoEl - The video element to initialize
  */
-function initVideoPlayer(videoEl) {
-  const streamUrl = videoEl.dataset.stream;
-  if (!streamUrl) {
-    console.warn('[initVideoPlayer] No stream URL found');
-    return;
-  }
-  
+async function initVideoPlayer(videoEl) {
   // Only initialize once
   if (videoEl._hlsInitialized) {
     console.log('[initVideoPlayer] Already initialized, skipping');
     return;
   }
   videoEl._hlsInitialized = true;
+  
+  const isLive = videoEl.dataset.live === 'true';
+  const mediaId = videoEl.dataset.mediaId;
+  let streamUrl = videoEl.dataset.stream;
+  
+  // For live streams, we need to fetch the actual streaming URL
+  if (isLive && mediaId) {
+    console.log('[initVideoPlayer] Live stream detected, fetching streaming URL for mediaId:', mediaId);
+    const container = videoEl.closest('.live-container');
+    const badge = container?.querySelector('.live-badge');
+    
+    try {
+      const response = await fetch(`/v1/posts/media/${mediaId}/streaming-url`);
+      const data = await response.json();
+      
+      console.log('[initVideoPlayer] Streaming URL response:', data);
+      
+      if (data.streamingUrl) {
+        streamUrl = data.streamingUrl;
+        
+        // Update badge based on status
+        if (badge) {
+          if (data.status === 'live-inprogress') {
+            badge.className = 'live-badge';
+            badge.textContent = '🔴 LIVE';
+          } else if (data.status === 'ready') {
+            badge.className = 'live-badge ended';
+            badge.textContent = '📹 Recorded';
+          } else if (data.status === 'pendingupload') {
+            badge.className = 'live-badge waiting';
+            badge.textContent = 'Processing...';
+          } else {
+            badge.className = 'live-badge ended';
+            badge.textContent = data.status || 'Video';
+          }
+        }
+      } else {
+        // No streaming URL available
+        console.warn('[initVideoPlayer] No streaming URL available:', data.message);
+        if (badge) {
+          badge.className = 'live-badge waiting';
+          badge.textContent = data.message || 'Not available';
+        }
+        return;
+      }
+    } catch (err) {
+      console.error('[initVideoPlayer] Failed to fetch streaming URL:', err);
+      if (badge) {
+        badge.className = 'live-badge waiting';
+        badge.textContent = 'Error loading';
+      }
+      return;
+    }
+  }
+  
+  if (!streamUrl) {
+    console.warn('[initVideoPlayer] No stream URL found');
+    return;
+  }
   
   console.log('[initVideoPlayer] Initializing video:', streamUrl.substring(0, 50) + '...');
   console.log('[initVideoPlayer] canPlayType HLS:', videoEl.canPlayType('application/vnd.apple.mpegurl'));
@@ -240,7 +263,6 @@ function initVideoPlayer(videoEl) {
     videoEl.play().catch((err) => console.log('[initVideoPlayer] Native play error:', err.message));
   } else if (typeof Hls !== 'undefined' && Hls.isSupported()) {
     // Use HLS.js for other browsers (Chrome, Firefox, Edge)
-    const isLive = videoEl.dataset.live === 'true';
     console.log('[initVideoPlayer] Using HLS.js, isLive:', isLive);
     const hls = new Hls({
       debug: false,
@@ -560,10 +582,12 @@ function setupVideoAutoplay() {
       console.log(`[IntersectionObserver] Video ${video.id}: isIntersecting=${entry.isIntersecting}, ratio=${entry.intersectionRatio.toFixed(2)}`);
       
       if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-        console.log(`[IntersectionObserver] Video ${video.id} is visible, data-stream=${!!video.dataset.stream}, initialized=${!!video._hlsInitialized}, src=${!!video.src}`);
+        console.log(`[IntersectionObserver] Video ${video.id} is visible, data-stream=${!!video.dataset.stream}, data-media-id=${!!video.dataset.mediaId}, initialized=${!!video._hlsInitialized}, src=${!!video.src}`);
         
         // Video is visible - initialize HLS if needed and play
-        if (video.dataset.stream && !video._hlsInitialized) {
+        // Check for regular video (data-stream) or live video (data-media-id)
+        const needsInit = (video.dataset.stream || video.dataset.mediaId) && !video._hlsInitialized;
+        if (needsInit) {
           // Chrome/Firefox: HLS.js needed - it will call play() when ready
           console.log(`[IntersectionObserver] Calling initVideoPlayer for ${video.id}`);
           initVideoPlayer(video);

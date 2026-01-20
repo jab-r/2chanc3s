@@ -17,6 +17,7 @@ export type PostDoc = {
 
 export type MediaInfo = {
   type: 'image' | 'video' | 'live';
+  mediaId?: string;  // Included for live streams to call /streaming-url endpoint
   thumbnail?: string;
   medium?: string;
   large?: string;
