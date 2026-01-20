@@ -144,10 +144,15 @@ function renderMedia(media) {
   }
   
   if (media.type === 'live') {
+    console.log('[renderMedia] Live type detected, media object:', JSON.stringify(media));
     const mediaId = media.mediaId;
     const title = media.title || 'Live Stream';
     
-    if (!mediaId) return '';
+    if (!mediaId) {
+      console.warn('[renderMedia] Live stream missing mediaId, skipping');
+      return '';
+    }
+    console.log('[renderMedia] Rendering live video with mediaId:', mediaId);
     
     // Generate unique ID for this video element
     const videoId = 'live-' + Math.random().toString(36).slice(2, 9);
@@ -451,11 +456,14 @@ function renderPosts(posts) {
 
   // Debug: log posts with media
   const postsWithMedia = posts.filter(p => p.media);
+  console.log(`[renderPosts] Total posts: ${posts.length}, posts with media: ${postsWithMedia.length}`);
   if (postsWithMedia.length > 0) {
     console.log('[renderPosts] Posts with media:', postsWithMedia.map(p => ({
       username: p.username,
       messageId: p.messageId,
       contentType: p.contentType,
+      mediaType: p.media?.type,
+      mediaId: p.media?.mediaId,
       media: p.media
     })));
   } else {
