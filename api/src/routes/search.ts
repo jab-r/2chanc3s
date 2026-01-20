@@ -12,7 +12,7 @@ const MEDIA_COLLECTION = "postMedia";
  */
 type MediaDoc = {
   mediaId: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'live';
   publicUrl: string;
   variants?: {
     thumbnail?: string;

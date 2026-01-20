@@ -1,120 +1,81 @@
-# Post Media API
+# Post Media API Guide
 
-Public media management for posts using Cloudflare Images and Stream.
+This guide covers the Post Media API endpoints and the `postMedia` Firestore collection structure.
 
 ## Overview
 
-The Post Media API enables uploading images and videos for public posts. Media is stored on Cloudflare's CDN with:
-
-- **Images**: Cloudflare Images with automatic variants (thumbnail, medium, large)
-- **Videos**: Cloudflare Stream with HLS adaptive streaming
-
-### Access Model
-
-| Operation | Authentication | Description |
-|-----------|---------------|-------------|
-| Upload URL | Required | Get signed upload URL from API |
-| Binary Upload | **None** | Direct upload to Cloudflare - no Firebase auth needed |
-| Finalize | Required | Complete upload, get public URLs |
-| Read/Download | **None** | Public CDN URLs - no Firebase auth needed |
-| Delete | Required | Delete owned media |
-
-> **Note:** While API endpoints require Bearer token authentication, the actual binary upload and download operations use Cloudflare's direct URLs which do **not** require Firebase authentication tokens. The Cloudflare URLs are pre-authorized and self-contained.
-
-### URL Expiration
-
-| Content Type | Expiration | Reason |
-|--------------|------------|--------|
-| Post Images | **Never** | Intentionally public content |
-| Post Videos | **Never** | Intentionally public content |
-| Profile Photos | 72 hours | Within-ecosystem access |
-| Message Attachments | Never | E2E encrypted |
+The Post Media system enables uploading images, videos, and live streams to public posts using Cloudflare services:
+- **Images**: Cloudflare Images (with auto-generated variants: thumbnail, medium, large, public)
+- **Videos**: Cloudflare Stream (with HLS playback via TUS resumable uploads)
+- **Live Streams**: Cloudflare Stream Live (with RTMPS/WebRTC ingest and HLS playback)
 
 ---
 
-## Endpoints
+## Upload Flow
 
-### POST `/v1/posts/media/upload-url`
+### Step 1: Request Upload URL
 
-Get a signed upload URL for uploading media directly to Cloudflare.
+**POST /v1/posts/media/upload-url** (Authentication Required)
 
-**Authentication:** Required (Bearer token)
-
-#### Request
-
+Request body:
 ```json
 {
-  "type": "image",
-  "filename": "sunset.jpg",
-  "contentType": "image/jpeg",
-  "metadata": {
-    "caption": "Beautiful sunset"
-  }
+  "type": "image" | "video" | "live",
+  "filename": "photo.jpg",        // Optional (not used for live)
+  "contentType": "image/jpeg",    // Optional (not used for live)
+  "fileSize": 15728640,           // REQUIRED for video uploads (bytes)
+  "title": "My livestream",       // Optional, for live streams
+  "recordToVod": true,            // Optional, auto-record live to VOD
+  "metadata": {}                  // Optional user-defined metadata
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `type` | string | Yes | `"image"` or `"video"` |
-| `filename` | string | No | Original filename |
-| `contentType` | string | No | MIME type (default: `image/jpeg` or `video/mp4`) |
-| `metadata` | object | No | Custom metadata to store with the media |
+**Important: `fileSize` is required for video uploads.** This is because Cloudflare Stream uses the TUS protocol which requires knowing the file size upfront via the `Upload-Length` header. Images don't require `fileSize` as Cloudflare Images handles this differently.
 
-#### Response (Image)
-
+Response (Image):
 ```json
 {
-  "uploadUrl": "https://upload.imagedelivery.net/...",
+  "uploadUrl": "https://upload.cloudflareimages.com/...",
   "uploadId": "abc123-def456",
   "expiresIn": 1800,
   "type": "image"
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `uploadUrl` | string | Cloudflare direct upload URL |
-| `uploadId` | string | Media ID for finalization |
-| `expiresIn` | number | Seconds until upload URL expires (30 min for images) |
-| `type` | string | Media type confirmation |
-
-#### Response (Video)
-
+Response (Video):
 ```json
 {
-  "uploadUrl": "https://upload.cloudflarestream.com/tus/...",
-  "uploadId": "vid-xyz789",
+  "uploadUrl": "https://upload.videodelivery.net/tus/...",
+  "uploadId": "video789-uid",
   "expiresIn": 21600,
   "type": "video",
   "protocol": "tus"
 }
 ```
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `uploadUrl` | string | TUS upload endpoint |
-| `uploadId` | string | Video UID for finalization |
-| `expiresIn` | number | Seconds until upload URL expires (6 hours for videos) |
-| `type` | string | Media type confirmation |
-| `protocol` | string | Upload protocol (`tus` for resumable uploads) |
+Response (Live Stream):
+```json
+{
+  "uploadId": "live-input-uid",
+  "type": "live",
+  "ingestUrl": "rtmps://live.cloudflare.com:443/live/...",
+  "webrtcUrl": "https://customer-xxx.cloudflarestream.com/.../webRTC/publish",
+  "playbackUrl": "https://customer-xxx.cloudflarestream.com/.../manifest/video.m3u8",
+  "iframe": "https://customer-xxx.cloudflarestream.com/.../iframe"
+}
+```
 
-#### Errors
+### Step 2: Upload to Cloudflare
 
-| Status | Code | Description |
-|--------|------|-------------|
-| 400 | `invalid_request` | Invalid type or missing required fields |
-| 401 | `unauthorized` | Missing or invalid bearer token |
-| 503 | `service_unavailable` | Cloudflare service not configured |
+**For Images:** POST multipart/form-data to the `uploadUrl`
 
----
+**For Videos:** Use TUS protocol client to upload to `uploadUrl`. The TUS protocol enables resumable uploads for large files.
 
-### POST `/v1/posts/media/finalize`
+**For Live Streams:** No upload step - start streaming immediately using the `ingestUrl` (RTMPS) or `webrtcUrl` (WebRTC). Share the `playbackUrl` with viewers.
 
-Finalize an upload and retrieve public URLs. This endpoint also runs content moderation.
+### Step 3: Finalize Upload (Images/Videos only)
 
-**Authentication:** Required (Bearer token)
-
-#### Request
+**POST /v1/posts/media/finalize** (Authentication Required)
 
 ```json
 {
@@ -122,297 +83,410 @@ Finalize an upload and retrieve public URLs. This endpoint also runs content mod
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `uploadId` | string | Yes | The `uploadId` from upload-url response |
+Response contains the public URLs for the media (see Document Structure below).
 
-#### Response (Image)
+---
+
+## Fetching Media
+
+The `postMedia` collection stores finalized media. Fetch a document by `mediaId`:
+
+```typescript
+const mediaDoc = await db.collection('postMedia').doc(mediaId).get();
+const mediaData = mediaDoc.data();
+```
+
+Or use the public API endpoint (no authentication required):
+
+```
+GET /v1/posts/media/:mediaId
+```
+
+---
+
+## Document Structure
+
+Documents in the `postMedia` collection have three possible structures based on the media `type`:
+
+### Image Document
+
+```typescript
+interface PostMediaImage {
+  mediaId: string;          // Unique identifier (same as document ID)
+  type: 'image';            // Media type discriminator
+  publicUrl: string;        // Primary public URL (same as variants.public)
+  variants: ImageVariants;  // All available image size variants
+  deviceId: string;         // ID of the device that uploaded this media
+  locationId: string;       // Location context where media was uploaded
+  finalizedAt: string;      // ISO 8601 timestamp when upload was finalized
+}
+
+interface ImageVariants {
+  public: string;           // Original/full-size image URL
+  thumbnail: string;        // Small thumbnail (~150px)
+  medium: string;           // Medium resolution (~600px)
+  large: string;            // Large resolution (~1200px)
+}
+```
+
+**Example Image Document:**
 
 ```json
 {
   "mediaId": "abc123-def456",
   "type": "image",
-  "publicUrl": "https://imagedelivery.net/hash/abc123-def456/public",
+  "publicUrl": "https://imagedelivery.net/<account_hash>/abc123-def456/public",
   "variants": {
-    "public": "https://imagedelivery.net/hash/abc123-def456/public",
-    "thumbnail": "https://imagedelivery.net/hash/abc123-def456/thumbnail",
-    "medium": "https://imagedelivery.net/hash/abc123-def456/medium",
-    "large": "https://imagedelivery.net/hash/abc123-def456/large"
-  }
-}
-```
-
-#### Response (Video)
-
-```json
-{
-  "mediaId": "vid-xyz789",
-  "type": "video",
-  "publicUrl": "https://videodelivery.net/vid-xyz789/manifest/video.m3u8",
-  "thumbnail": "https://videodelivery.net/vid-xyz789/thumbnails/thumbnail.jpg",
-  "iframe": "https://videodelivery.net/vid-xyz789/iframe",
-  "status": "ready",
-  "duration": 45.5
-}
-```
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `status` | string | Processing status: `pending`, `ready`, or `error` |
-| `duration` | number | Video duration in seconds |
-
-#### Content Moderation
-
-Images are automatically checked for policy violations during finalization. If content is flagged:
-
-```json
-{
-  "error": {
-    "code": "content_policy_violation",
-    "message": "Content contains sexual content and violates community guidelines"
-  }
-}
-```
-
-The flagged media is automatically deleted from Cloudflare.
-
-#### Errors
-
-| Status | Code | Description |
-|--------|------|-------------|
-| 400 | `invalid_request` | Missing uploadId |
-| 400 | `content_policy_violation` | Content failed moderation |
-| 401 | `unauthorized` | Missing or invalid bearer token |
-| 403 | `forbidden` | Not authorized to finalize this upload |
-| 404 | `not_found` | Upload not found or expired |
-
----
-
-### GET `/v1/posts/media/:mediaId`
-
-Get public URLs for media.
-
-**Authentication:** None required (public endpoint)
-
-#### Response (Image)
-
-```json
-{
-  "mediaId": "abc123-def456",
-  "type": "image",
-  "publicUrl": "https://imagedelivery.net/hash/abc123-def456/public",
-  "variants": {
-    "public": "https://imagedelivery.net/hash/abc123-def456/public",
-    "thumbnail": "https://imagedelivery.net/hash/abc123-def456/thumbnail",
-    "medium": "https://imagedelivery.net/hash/abc123-def456/medium",
-    "large": "https://imagedelivery.net/hash/abc123-def456/large"
-  }
-}
-```
-
-#### Response (Video)
-
-```json
-{
-  "mediaId": "vid-xyz789",
-  "type": "video",
-  "publicUrl": "https://videodelivery.net/vid-xyz789/manifest/video.m3u8",
-  "thumbnail": "https://videodelivery.net/vid-xyz789/thumbnails/thumbnail.jpg",
-  "iframe": "https://videodelivery.net/vid-xyz789/iframe",
-  "status": "ready",
-  "duration": 45.5
-}
-```
-
-#### Caching
-
-Response includes cache headers:
-```
-Cache-Control: public, max-age=86400
-```
-
-#### Errors
-
-| Status | Code | Description |
-|--------|------|-------------|
-| 400 | `invalid_request` | Missing mediaId |
-| 404 | `not_found` | Media not found |
-
----
-
-### DELETE `/v1/posts/media/:mediaId`
-
-Delete owned media.
-
-**Authentication:** Required (Bearer token)
-
-#### Response
-
-```json
-{
-  "success": true
-}
-```
-
-This operation is idempotent - deleting already-deleted media returns success.
-
-#### Errors
-
-| Status | Code | Description |
-|--------|------|-------------|
-| 401 | `unauthorized` | Missing or invalid bearer token |
-| 403 | `forbidden` | Not authorized to delete this media |
-
----
-
-## Upload Flows
-
-### Image Upload Flow
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API as Loxation API
-    participant CF as Cloudflare Images
-
-    Client->>API: POST /v1/posts/media/upload-url<br/>{type: "image"}<br/>(Bearer token required)
-    API-->>Client: {uploadUrl, uploadId}
-    
-    Client->>CF: POST uploadUrl<br/>(multipart/form-data with image)<br/>(NO auth required)
-    CF-->>Client: 200 OK
-    
-    Client->>API: POST /v1/posts/media/finalize<br/>{uploadId}<br/>(Bearer token required)
-    Note over API: Content moderation check
-    API-->>Client: {mediaId, publicUrl, variants}
-```
-
-> **Note:** The direct upload to Cloudflare (step 2) does NOT require Firebase authentication. The presigned `uploadUrl` contains all necessary authorization.
-
-### Video Upload Flow (TUS Protocol)
-
-```mermaid
-sequenceDiagram
-    participant Client
-    participant API as Loxation API
-    participant Stream as Cloudflare Stream
-
-    Client->>API: POST /v1/posts/media/upload-url<br/>{type: "video"}<br/>(Bearer token required)
-    API-->>Stream: Request TUS endpoint
-    Stream-->>API: TUS upload URL
-    API-->>Client: {uploadUrl, uploadId, protocol: "tus"}
-    
-    loop Resumable Upload (NO auth required)
-        Client->>Stream: PATCH uploadUrl (chunks)
-        Stream-->>Client: Progress
-    end
-    
-    Client->>API: POST /v1/posts/media/finalize<br/>{uploadId}<br/>(Bearer token required)
-    API->>Stream: Get video status
-    API-->>Client: {mediaId, publicUrl, status}
-```
-
-> **Note:** The direct upload to Cloudflare Stream (TUS protocol steps) does NOT require Firebase authentication. The presigned `uploadUrl` contains all necessary authorization for the entire upload session.
-
----
-
-## URL Formats
-
-### Image Delivery URLs
-
-Format: `https://imagedelivery.net/<account_hash>/<image_id>/<variant>`
-
-| Variant | Max Size | Use Case |
-|---------|----------|----------|
-| `public` | Original | Full resolution |
-| `thumbnail` | 150×150 | Feed previews, lists |
-| `medium` | 600×600 | In-feed display |
-| `large` | 1200×1200 | Full-screen view |
-
-### Video Delivery URLs
-
-Format: `https://videodelivery.net/<video_uid>/<resource>`
-
-| Resource | Description |
-|----------|-------------|
-| `/manifest/video.m3u8` | HLS playlist for adaptive streaming |
-| `/thumbnails/thumbnail.jpg` | Auto-generated thumbnail |
-| `/iframe` | Embeddable player |
-
----
-
-## Integration with Posts
-
-When creating posts with media, include the optional `mediaId` field in the `POST /v1/post/create` request:
-
-### Request Example
-
-```json
-{
-  "message": "Check out this sunset!",
-  "messageId": "uuid-1234",
-  "username": "johndoe",
-  "contentType": "image/jpeg",
-  "location": {
-    "latitude": 37.7749,
-    "longitude": -122.4194,
-    "accuracyM": 250
+    "public": "https://imagedelivery.net/<account_hash>/abc123-def456/public",
+    "thumbnail": "https://imagedelivery.net/<account_hash>/abc123-def456/thumbnail",
+    "medium": "https://imagedelivery.net/<account_hash>/abc123-def456/medium",
+    "large": "https://imagedelivery.net/<account_hash>/abc123-def456/large"
   },
-  "mediaId": "abc123-def456"
+  "deviceId": "device_xyz",
+  "locationId": "loc_123",
+  "finalizedAt": "2026-01-15T10:30:00.000Z"
 }
 ```
 
-### Fields
+### Video Document
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `message` | string | Yes | Post content text |
-| `messageId` | string | Yes | Client-generated unique ID |
-| `username` | string | Yes | Display username |
-| `contentType` | string | No | MIME type (`text/plain`, `image/jpeg`, `video/mp4`, etc.) |
-| `location` | object | No | Coordinates for geolocator |
-| `mediaId` | string | No | Reference to finalized media from `/v1/posts/media/finalize` |
+```typescript
+interface PostMediaVideo {
+  mediaId: string;          // Unique identifier (same as document ID)
+  type: 'video';            // Media type discriminator
+  publicUrl: string;        // HLS playback URL
+  thumbnail: string;        // Video thumbnail image URL
+  iframe: string;           // Embeddable iframe HTML
+  status: VideoStatus;      // Processing status
+  duration: number;         // Video duration in seconds
+  deviceId: string;         // ID of the device that uploaded this media
+  locationId: string;       // Location context where media was uploaded
+  finalizedAt: string;      // ISO 8601 timestamp when upload was finalized
+}
 
-### Content Type Semantics
+type VideoStatus = 'pending' | 'ready' | 'error';
+```
 
-| contentType | mediaId | Description |
-|-------------|---------|-------------|
-| `text/plain` | null/absent | Text-only post (default) |
-| `image/jpeg`, `image/png`, `image/gif`, `image/webp` | required | Post with image |
-| `video/mp4`, `video/quicktime` | required | Post with video |
+**Example Video Document:**
 
-### Validation
+```json
+{
+  "mediaId": "video789-uid",
+  "type": "video",
+  "publicUrl": "https://customer-<code>.cloudflarestream.com/video789-uid/manifest/video.m3u8",
+  "thumbnail": "https://customer-<code>.cloudflarestream.com/video789-uid/thumbnails/thumbnail.jpg",
+  "iframe": "<iframe src=\"https://customer-<code>.cloudflarestream.com/video789-uid/iframe\" ...></iframe>",
+  "status": "ready",
+  "duration": 45.5,
+  "deviceId": "device_xyz",
+  "locationId": "loc_123",
+  "finalizedAt": "2026-01-15T10:30:00.000Z"
+}
+```
 
-1. If `mediaId` is provided:
-   - Media must exist in `postMedia` collection
-   - Authenticated device must own the media
-   - `contentType` should match media type
+### Live Stream Document
 
-2. If `mediaId` is absent/null:
-   - `contentType` defaults to `text/plain`
+```typescript
+interface PostMediaLive {
+  mediaId: string;          // Unique identifier (same as document ID, liveInputId)
+  type: 'live';             // Media type discriminator
+  publicUrl: string;        // HLS playback URL
+  iframe: string;           // Embeddable iframe URL
+  title: string;            // Stream title
+  status: LiveStatus;       // Stream status
+  recordToVod: boolean;     // Whether auto-recording to VOD is enabled
+  deviceId: string;         // ID of the device that created this stream
+  locationId: string;       // Location context where stream was created
+  createdAt: string;        // ISO 8601 timestamp when stream was created
+}
 
-### Error Responses
+type LiveStatus = 'created' | 'live' | 'ended';
+```
 
-| Status | Code | Description |
-|--------|------|-------------|
-| 400 | `media_not_found` | Referenced mediaId does not exist |
-| 403 | `forbidden` | Media not owned by authenticated device |
+**Example Live Stream Document:**
 
-### Media Reuse
+```json
+{
+  "mediaId": "live-input-uid",
+  "type": "live",
+  "publicUrl": "https://customer-<code>.cloudflarestream.com/live-input-uid/manifest/video.m3u8",
+  "iframe": "https://customer-<code>.cloudflarestream.com/live-input-uid/iframe",
+  "title": "My Livestream",
+  "status": "live",
+  "recordToVod": true,
+  "deviceId": "device_xyz",
+  "locationId": "loc_123",
+  "createdAt": "2026-01-15T10:30:00.000Z"
+}
+```
 
-The same `mediaId` can be used in multiple posts. Media and posts have independent lifecycles:
-- Deleting a post does **not** delete the associated media
-- Deleting media does **not** delete posts that reference it (clients handle gracefully)
+> **Note:** Ingest URLs (RTMPS/WebRTC) are NOT stored in the database for security reasons. They are only returned in the initial API response when creating the live stream.
 
 ---
 
-## Error Codes Summary
+## Live Streaming
 
-| Code | Description |
-|------|-------------|
-| `invalid_request` | Malformed request or missing required fields |
-| `unauthorized` | Authentication required or invalid token |
-| `forbidden` | User not authorized for this operation |
-| `not_found` | Media or upload record not found |
-| `content_policy_violation` | Content failed moderation check |
-| `service_unavailable` | Cloudflare service not configured or down |
-| `internal_error` | Server-side error |
+### Ingest Protocols
+
+Live streams support two ingest protocols:
+
+| Protocol | URL Format | Use Case |
+|----------|------------|----------|
+| **RTMPS** | `rtmps://live.cloudflare.com:443/live/{streamKey}` | OBS, streaming software, hardware encoders |
+| **WebRTC** | `https://customer-xxx.cloudflarestream.com/.../webRTC/publish` | Browser-based streaming, mobile apps |
+
+### Playback
+
+Viewers receive the HLS playback URL (`playbackUrl` in the response). The playback URL format:
+- `https://customer-xxx.cloudflarestream.com/{liveInputId}/manifest/video.m3u8`
+
+Content-Types for playback:
+- **HLS Manifest:** `application/vnd.apple.mpegurl`
+- **HLS Segments:** `video/mp2t` (MPEG-TS) or `video/mp4` (fMP4)
+
+### Example: Starting a Live Stream (iOS/Swift)
+
+```swift
+// 1. Request live stream credentials
+let response = try await api.post("/v1/posts/media/upload-url", body: [
+    "type": "live",
+    "title": "My Stream",
+    "recordToVod": true
+])
+
+// 2. Configure RTMP streaming
+let rtmpUrl = response.ingestUrl  // rtmps://live.cloudflare.com:443/live/...
+// Use a library like HaishinKit to stream to this URL
+
+// 3. Share playback URL with viewers
+let playbackUrl = response.playbackUrl
+```
+
+### Example: Watching a Live Stream
+
+```typescript
+// Using HLS.js (web)
+import Hls from 'hls.js';
+
+const video = document.getElementById('video');
+if (Hls.isSupported()) {
+  const hls = new Hls();
+  hls.loadSource(liveData.publicUrl);  // HLS manifest URL
+  hls.attachMedia(video);
+}
+
+// Native iOS/macOS - use AVPlayer with the HLS URL
+// Native Android - use ExoPlayer with the HLS URL
+```
+
+---
+
+## Usage Patterns
+
+### Determining Media Type
+
+Always check the `type` field first to handle the document appropriately:
+
+```typescript
+const mediaData = mediaDoc.data();
+
+if (mediaData.type === 'image') {
+  // Handle image - use variants for different sizes
+  displayImage(mediaData.variants.medium);
+} else if (mediaData.type === 'video') {
+  // Handle video - use publicUrl for HLS playback
+  initVideoPlayer(mediaData.publicUrl);
+}
+```
+
+### Using Image Variants
+
+For images, choose the appropriate variant based on your use case:
+
+| Variant     | Use Case                           | Approximate Size |
+|-------------|-------------------------------------|------------------|
+| `thumbnail` | List views, previews, avatars       | ~150px           |
+| `medium`    | Feed items, cards, detail views     | ~600px           |
+| `large`     | Full-screen viewing, galleries      | ~1200px          |
+| `public`    | Original quality, downloads         | Original size    |
+
+```typescript
+// In a list/feed view
+const listImageUrl = mediaData.variants.thumbnail;
+
+// In a detail view
+const detailImageUrl = mediaData.variants.medium;
+
+// For full-screen gallery
+const fullImageUrl = mediaData.variants.large;
+```
+
+### Handling Video Status
+
+Videos require processing before they're ready for playback. Always check the `status` field:
+
+```typescript
+const videoData = mediaDoc.data();
+
+switch (videoData.status) {
+  case 'ready':
+    // Video is ready for playback
+    initVideoPlayer(videoData.publicUrl);
+    break;
+  case 'pending':
+    // Video is still processing
+    showProcessingIndicator();
+    // Consider polling or listening for updates
+    break;
+  case 'error':
+    // Processing failed
+    showErrorState();
+    break;
+}
+```
+
+### Video Playback
+
+The `publicUrl` for videos is an HLS manifest (`.m3u8`). Use an HLS-compatible player:
+
+```typescript
+// Using HLS.js (web)
+import Hls from 'hls.js';
+
+const video = document.getElementById('video');
+if (Hls.isSupported()) {
+  const hls = new Hls();
+  hls.loadSource(videoData.publicUrl);
+  hls.attachMedia(video);
+}
+
+// Native iOS/macOS - use AVPlayer directly with the HLS URL
+// Native Android - use ExoPlayer with the HLS URL
+```
+
+### Using the iframe (Videos)
+
+For simple embedding without a custom player, use the provided iframe HTML:
+
+```html
+<!-- The iframe field contains ready-to-use HTML -->
+<div class="video-container">
+  ${videoData.iframe}
+</div>
+```
+
+---
+
+## API Response Examples
+
+### GET /v1/posts/media/:mediaId (Image)
+
+```json
+{
+  "mediaId": "abc123-def456",
+  "type": "image",
+  "publicUrl": "https://imagedelivery.net/<hash>/abc123-def456/public",
+  "variants": {
+    "public": "https://imagedelivery.net/<hash>/abc123-def456/public",
+    "thumbnail": "https://imagedelivery.net/<hash>/abc123-def456/thumbnail",
+    "medium": "https://imagedelivery.net/<hash>/abc123-def456/medium",
+    "large": "https://imagedelivery.net/<hash>/abc123-def456/large"
+  }
+}
+```
+
+### GET /v1/posts/media/:mediaId (Video)
+
+```json
+{
+  "mediaId": "video789-uid",
+  "type": "video",
+  "publicUrl": "https://customer-<code>.cloudflarestream.com/video789-uid/manifest/video.m3u8",
+  "thumbnail": "https://customer-<code>.cloudflarestream.com/video789-uid/thumbnails/thumbnail.jpg",
+  "iframe": "<iframe src=\"...\" ...></iframe>",
+  "status": "ready",
+  "duration": 45.5
+}
+```
+
+### GET /v1/posts/media/:mediaId (Live Stream)
+
+```json
+{
+  "mediaId": "live-input-uid",
+  "type": "live",
+  "publicUrl": "https://customer-<code>.cloudflarestream.com/live-input-uid/manifest/video.m3u8",
+  "iframe": "https://customer-<code>.cloudflarestream.com/live-input-uid/iframe",
+  "title": "My Livestream",
+  "status": "live",
+  "recordToVod": true
+}
+```
+
+---
+
+## Caching
+
+- API responses include `Cache-Control: public, max-age=86400` (24 hours)
+- Cloudflare CDN caches the actual media files at edge locations
+- Image variant URLs are stable and can be cached client-side indefinitely
+- Video URLs may change if re-encoded; rely on the `publicUrl` from the document
+
+---
+
+## Field Reference
+
+| Field         | Type     | Present In       | Description |
+|---------------|----------|------------------|-------------|
+| `mediaId`     | string   | All types        | Unique identifier, matches document ID |
+| `type`        | string   | All types        | `'image'`, `'video'`, or `'live'` |
+| `publicUrl`   | string   | All types        | Primary URL for the media (HLS playback URL for video/live) |
+| `variants`    | object   | Image only       | Object with `public`, `thumbnail`, `medium`, `large` URLs |
+| `thumbnail`   | string   | Video only       | Video thumbnail image URL |
+| `iframe`      | string   | Video, Live      | Embeddable iframe URL/HTML |
+| `status`      | string   | Video, Live      | Video: `pending`, `ready`, or `error`. Live: `created`, `live`, or `ended` |
+| `duration`    | number   | Video only       | Duration in seconds |
+| `title`       | string   | Live only        | Stream title |
+| `recordToVod` | boolean  | Live only        | Whether auto-recording to VOD is enabled |
+| `deviceId`    | string   | All types        | Uploader's device ID (for authorization) |
+| `locationId`  | string   | All types        | Location context of upload |
+| `finalizedAt` | string   | Image, Video     | ISO 8601 timestamp of finalization |
+| `createdAt`   | string   | Live only        | ISO 8601 timestamp when stream was created |
+
+---
+
+## Error Handling
+
+When fetching media, handle these scenarios:
+
+```typescript
+async function getMedia(mediaId: string) {
+  try {
+    const response = await fetch(`/v1/posts/media/${mediaId}`);
+    
+    if (response.status === 404) {
+      // Media not found or was deleted
+      return null;
+    }
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error: ${response.status}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Failed to fetch media:', error);
+    throw error;
+  }
+}
+```
+
+---
+
+## Related Collections
+
+| Collection          | Purpose |
+|--------------------|---------|
+| `postMedia`        | Finalized, publicly accessible media |
+| `pendingPostMedia` | Media uploads in progress (not yet finalized) |
+| `posts`            | Post documents that may reference media via `mediaId` |

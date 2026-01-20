@@ -16,13 +16,17 @@ export type PostDoc = {
 };
 
 export type MediaInfo = {
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'live';
   thumbnail?: string;
   medium?: string;
   large?: string;
   public?: string;
   stream?: string;
   duration?: number;
+  // Live stream fields
+  iframe?: string;
+  status?: 'created' | 'live' | 'ended';
+  title?: string;
 };
 
 export type PublicPost = {

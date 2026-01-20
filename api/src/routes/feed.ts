@@ -13,7 +13,7 @@ const MEDIA_COLLECTION = "postMedia";
  */
 type MediaDoc = {
   mediaId: string;
-  type: 'image' | 'video';
+  type: 'image' | 'video' | 'live';
   publicUrl: string;
   // Image fields
   variants?: {
@@ -25,8 +25,10 @@ type MediaDoc = {
   // Video fields
   thumbnail?: string;    // video thumbnail URL
   iframe?: string;       // embeddable player URL
-  status?: string;       // video processing status
+  status?: string;       // video/live processing status: 'pending' | 'ready' | 'error' | 'created' | 'live' | 'ended'
   duration?: number;     // video duration in seconds
+  // Live stream fields
+  title?: string;        // live stream title
 };
 
 /**
@@ -87,6 +89,15 @@ async function resolveMediaUrls(mediaIds: string[]): Promise<Map<string, MediaIn
           thumbnail: data.thumbnail,
           stream: data.publicUrl,  // HLS manifest URL
           duration: data.duration,
+        });
+      } else if (data.type === 'live') {
+        // For live streams, publicUrl contains the HLS manifest URL
+        result.set(docId, {
+          type: 'live',
+          stream: data.publicUrl,  // HLS manifest URL
+          iframe: data.iframe,     // Embeddable player URL
+          status: data.status as 'created' | 'live' | 'ended',
+          title: data.title,
         });
       } else {
         console.log(`[resolveMediaUrls] Unknown media type: ${data.type}`);

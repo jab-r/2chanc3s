@@ -45,7 +45,10 @@ Additional simplification:
   geolocatorStatus?: 'resolved' | 'missing_device_location',
 
   // Optional media attachment reference
-  mediaId?: string | null       // Reference to finalized media from postMedia collection
+  mediaId?: string | null,      // Reference to finalized media from postMedia collection
+
+  // Optional category for filtering
+  category?: string | null      // Category for post filtering and feed queries
 }
 ```
 
@@ -67,7 +70,8 @@ Requires `Authorization: Bearer <token>`.
   "username": "johndoe",
   "contentType": "text/plain",
   "location": { "latitude": 40.7128, "longitude": -74.0060, "accuracyM": 25 },
-  "mediaId": "abc123-def456"
+  "mediaId": "abc123-def456",
+  "category": "sports"
 }
 ```
 
@@ -79,9 +83,14 @@ Requires `Authorization: Bearer <token>`.
 - `location` (optional, nullable):
   - If omitted or `null`, derive geolocator from device last-known location stored by the location subsystem.
   - If provided, it must be `{ latitude, longitude, accuracyM? }` and the server derives geolocator from these coordinates.
-- `mediaId` (optional): reference to finalized media from `/v1/posts/media/finalize`. See [Post Media API](../loxation-server/docs/api/post-media.md).
+- `mediaId` (optional): reference to finalized media from `/v1/posts/media/finalize`. See [Post Media API](post-media.md).
   - If provided, media must exist and be owned by the authenticated device.
   - Media can be reused across multiple posts.
+  - Supports images, videos, and **live streams** (use the `uploadId` from live stream creation as `mediaId`).
+- `category` (optional, nullable): string category for filtering posts.
+  - If omitted or `null`, post will have no category.
+  - Must be a non-empty string if provided.
+  - Used for filtering posts by category in feed queries.
 
 ### Behavior
 - Stores/upserts in `posts` using document id `${deviceId}:${messageId}`.
