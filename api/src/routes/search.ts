@@ -24,6 +24,7 @@ type MediaDoc = {
   iframe?: string;
   status?: string;
   duration?: number;
+  title?: string;  // Live stream title
 };
 
 /**
@@ -63,6 +64,15 @@ async function resolveMediaUrls(mediaIds: string[]): Promise<Map<string, MediaIn
           thumbnail: data.thumbnail,
           stream: data.publicUrl,
           duration: data.duration,
+        });
+      } else if (data.type === 'live') {
+        // For live streams, publicUrl contains the HLS manifest URL
+        result.set(docId, {
+          type: 'live',
+          stream: data.publicUrl,  // HLS manifest URL
+          iframe: data.iframe,     // Embeddable player URL
+          status: data.status as 'created' | 'live' | 'ended',
+          title: data.title,
         });
       }
     }

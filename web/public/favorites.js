@@ -178,6 +178,70 @@ function renderMedia(media) {
     }
   }
   
+  if (media.type === 'live') {
+    const streamUrl = media.stream;
+    const title = media.title || 'Live Stream';
+    const status = media.status || 'live';
+    
+    if (!streamUrl) return '';
+    
+    // Generate unique ID for this video element
+    const videoId = 'live-' + Math.random().toString(36).slice(2, 9);
+    
+    // Status badge - different styling based on stream state
+    let statusBadge;
+    if (status === 'live') {
+      statusBadge = '<span class="live-badge">🔴 LIVE</span>';
+    } else if (status === 'ended') {
+      statusBadge = '<span class="live-badge ended">Stream ended</span>';
+    } else {
+      statusBadge = '<span class="live-badge waiting">Starting soon...</span>';
+    }
+    
+    // iOS/Safari have native HLS
+    const isSafari = /Safari/.test(navigator.userAgent) && !/Chrome/.test(navigator.userAgent);
+    const hasNativeHLS = isIOS || isSafari;
+    
+    if (hasNativeHLS) {
+      return `
+        <div class="post-media video-container live-container">
+          ${statusBadge}
+          <video
+            id="${videoId}"
+            src="${escapeText(streamUrl)}"
+            controls
+            playsinline
+            muted
+            preload="metadata"
+            webkit-playsinline="true"
+          >
+            <source src="${escapeText(streamUrl)}" type="application/vnd.apple.mpegurl">
+            Your browser does not support live playback.
+          </video>
+          <button class="unmute-btn" aria-label="Unmute">🔇</button>
+        </div>
+      `;
+    } else {
+      return `
+        <div class="post-media video-container live-container">
+          ${statusBadge}
+          <video
+            id="${videoId}"
+            controls
+            playsinline
+            muted
+            preload="none"
+            data-stream="${escapeText(streamUrl)}"
+            data-live="true"
+          >
+            Your browser does not support live playback.
+          </video>
+          <button class="unmute-btn" aria-label="Unmute">🔇</button>
+        </div>
+      `;
+    }
+  }
+  
   return '';
 }
 
@@ -343,7 +407,7 @@ function renderPosts(posts, username) {
     const full = p.content || '';
     const snippet = full.length > 240 ? full.slice(0, 240) + '…' : full;
     const hasMore = full.length > snippet.length;
-    const hasMedia = p.media && (p.media.type === 'image' || p.media.type === 'video');
+    const hasMedia = p.media && (p.media.type === 'image' || p.media.type === 'video' || p.media.type === 'live');
 
     const el = document.createElement('div');
     el.className = 'post';
