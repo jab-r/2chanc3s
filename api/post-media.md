@@ -319,6 +319,34 @@ Content-Types for playback:
 - **HLS Manifest:** `application/vnd.apple.mpegurl`
 - **HLS Segments:** `video/mp2t` (MPEG-TS) or `video/mp4` (fMP4)
 
+### POST /v1/posts/media/:mediaId/broadcast-started
+
+**Notify the server that a live broadcast has started.** Call this endpoint immediately after your RTMP/WebRTC client connects and starts streaming. This updates the `publicUrl` in the `postMedia` Firestore document with the correct Video Output UID URL.
+
+**Requires authentication** - only the stream owner can call this.
+
+**Response (Success):**
+```json
+{
+  "success": true,
+  "mediaId": "live-input-uid",
+  "videoId": "<video-output-uid>",
+  "publicUrl": "https://customer-xxx.cloudflarestream.com/<video-output-uid>/manifest/video.m3u8",
+  "iframe": "https://customer-xxx.cloudflarestream.com/<video-output-uid>/iframe",
+  "status": "live-inprogress",
+  "message": "Broadcast detected! postMedia.publicUrl has been updated with the correct playback URL."
+}
+```
+
+**Response (Broadcast Not Yet Detected):**
+```json
+{
+  "message": "Broadcast not yet detected by Cloudflare. The stream may take a few seconds to register. Try again shortly.",
+  "mediaId": "live-input-uid",
+  "status": "pending"
+}
+```
+
 ### Example: Starting a Live Stream (iOS/Swift)
 
 ```swift
@@ -329,12 +357,23 @@ let response = try await api.post("/v1/posts/media/upload-url", body: [
     "recordToVod": true
 ])
 
+let mediaId = response.uploadId
+
 // 2. Configure RTMP streaming
 let rtmpUrl = response.ingestUrl  // rtmps://live.cloudflare.com:443/live/...
 // Use a library like HaishinKit to stream to this URL
 
-// 3. Share playback URL with viewers
-let playbackUrl = response.playbackUrl
+// 3. IMPORTANT: After streaming starts, notify server to update playback URL
+// Wait 2-3 seconds for Cloudflare to register the stream
+DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+    Task {
+        let broadcastResponse = try await api.post("/v1/posts/media/\(mediaId)/broadcast-started")
+        // Now postMedia.publicUrl in Firestore has the correct playback URL
+        print("Playback URL updated: \(broadcastResponse.publicUrl)")
+    }
+}
+
+// 4. Viewers can now read postMedia from Firestore and get the correct URL
 ```
 
 ### Example: Watching a Live Stream
