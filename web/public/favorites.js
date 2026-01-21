@@ -13,8 +13,19 @@ const favoritesListEl = document.getElementById('favoritesList');
 const newFavoriteEl = document.getElementById('newFavorite');
 const btnAddFavorite = document.getElementById('btnAddFavorite');
 
-// Platform detection
-const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+// ====== PLATFORM DETECTION ======
+// On iOS, ONLY Safari supports Universal Links. ALL other iOS browsers need custom URL scheme.
+const ua = navigator.userAgent || '';
+const isIOS = /iPhone|iPad|iPod/i.test(ua);
+const isAndroid = /Android/i.test(ua);
+
+// Safari on iOS: contains "Safari" but NOT any third-party browser identifiers.
+const isIOSSafari = isIOS && /Safari/i.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS|Brave|DuckDuckGo|Focus/i.test(ua);
+
+// Any iOS browser that's NOT Safari needs custom scheme fallback
+const isIOSNotSafari = isIOS && !isIOSSafari;
+
+console.log('[Platform]', { isIOS, isAndroid, isIOSSafari, isIOSNotSafari });
 
 // ============================================================
 // localStorage Functions
@@ -84,19 +95,81 @@ function fmtTime(iso) {
   }
 }
 
-// Reply URL for Android and desktop
-function replyUrl(username, messageId) {
+// ====== REPLY URL GENERATORS ======
+
+// Custom URL scheme for app - works on iOS non-Safari, and as fallback
+function replyUrlCustomScheme(username, messageId) {
   const u = encodeURIComponent(username);
   const m = encodeURIComponent(messageId);
-  return `https://www.2chanc3s.com/reply?username=${u}&messageId=${m}`;
+  return `loxation://reply?username=${u}&messageId=${m}`;
 }
 
-// iOS reply URL - different domain to trigger Universal Links
-function replyUrlIOS(username, messageId) {
+// HTTPS URL for web fallback page (also Universal Link host)
+function replyUrlHTTPS(username, messageId) {
   const u = encodeURIComponent(username);
   const m = encodeURIComponent(messageId);
   return `https://public.loxation.com/reply?username=${u}&messageId=${m}`;
 }
+
+// Android intent:// URL with Play Store fallback
+function replyUrlAndroid(username, messageId) {
+  const u = encodeURIComponent(username);
+  const m = encodeURIComponent(messageId);
+  const fallback = encodeURIComponent('https://play.google.com/store/apps/details?id=com.jabresearch.loxation');
+  return `intent://reply?username=${u}&messageId=${m}#Intent;scheme=loxation;package=com.jabresearch.loxation;S.browser_fallback_url=${fallback};end`;
+}
+
+/**
+ * Get the appropriate reply URL based on platform
+ */
+function getReplyUrl(username, messageId) {
+  if (isAndroid) {
+    return replyUrlAndroid(username, messageId);
+  }
+  return replyUrlHTTPS(username, messageId);
+}
+
+/**
+ * Handle Reply button click - special handling for iOS non-Safari browsers
+ */
+function handleReplyClick(event, username, messageId) {
+  if (!isIOSNotSafari) {
+    return true; // Let default href work
+  }
+  
+  event.preventDefault();
+  const customUrl = replyUrlCustomScheme(username, messageId);
+  const fallbackUrl = replyUrlHTTPS(username, messageId);
+  openAppWithFallback(customUrl, fallbackUrl);
+  return false;
+}
+
+/**
+ * Attempt to open app via custom scheme with web fallback
+ */
+function openAppWithFallback(customSchemeUrl, fallbackWebUrl) {
+  const startTime = Date.now();
+  let userLeftPage = false;
+  
+  const handleVisibilityChange = () => {
+    if (document.hidden) userLeftPage = true;
+  };
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  
+  window.location.href = customSchemeUrl;
+  
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    const elapsed = Date.now() - startTime;
+    if (!userLeftPage && !document.hidden && elapsed >= 1400) {
+      console.log('[openAppWithFallback] App did not open, redirecting to fallback');
+      window.location.href = fallbackWebUrl;
+    }
+  }, 1500);
+}
+
+// Make handleReplyClick available globally
+window.handleReplyClick = handleReplyClick;
 
 // ============================================================
 // Media Rendering
@@ -435,7 +508,10 @@ function renderPosts(posts, username) {
       ${renderMedia(p.media)}
       <div class="content" data-full="${escapeText(full)}" data-snippet="${escapeText(snippet)}">${escapeText(snippet)}</div>
       <div class="actions">
-        <a class="btn" href="${isIOS ? replyUrlIOS(pUsername, messageId) : replyUrl(pUsername, messageId)}">Reply (in app)</a>
+        <a class="btn reply-btn" href="${getReplyUrl(pUsername, messageId)}"
+           data-username="${escapeText(pUsername)}"
+           data-messageid="${escapeText(messageId)}"
+           onclick="return window.handleReplyClick(event, this.dataset.username, this.dataset.messageid)">Reply (in app)</a>
         ${hasMore && !hasMedia ? '<button class="btn toggle">Show full</button>' : ''}
       </div>
     `;

@@ -41,23 +41,133 @@ function fmtTime(iso) {
   }
 }
 
-// Reply URL for Android and desktop (same-domain, Android App Links work fine)
-function replyUrl(username, messageId) {
+// ====== PLATFORM DETECTION ======
+// On iOS, ONLY Safari supports Universal Links. ALL other iOS browsers need custom URL scheme.
+// Simple approach: if it's iOS and NOT Safari, use custom scheme fallback.
+//
+const ua = navigator.userAgent || '';
+const isIOS = /iPhone|iPad|iPod/i.test(ua);
+const isAndroid = /Android/i.test(ua);
+
+// Safari on iOS: contains "Safari" but NOT any third-party browser identifiers.
+// Known iOS browser UA markers:
+// - CriOS = Chrome, FxiOS = Firefox, OPiOS = Opera, EdgiOS = Edge, Brave = Brave
+// - DuckDuckGo, Focus (Firefox Focus), Coast, etc. also exist
+// All third-party browsers on iOS also have "Safari" in UA (WebKit requirement),
+// so we must exclude them explicitly.
+const isIOSSafari = isIOS && /Safari/i.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS|Brave|DuckDuckGo|Focus/i.test(ua);
+
+// Any iOS browser that's NOT Safari needs custom scheme fallback
+const isIOSNotSafari = isIOS && !isIOSSafari;
+
+console.log('[Platform]', { isIOS, isAndroid, isIOSSafari, isIOSNotSafari, ua: ua.substring(0, 120) });
+
+// ====== REPLY URL GENERATORS ======
+
+// Custom URL scheme for app - works on iOS Chrome, and as fallback
+function replyUrlCustomScheme(username, messageId) {
   const u = encodeURIComponent(username);
   const m = encodeURIComponent(messageId);
-  return `https://www.2chanc3s.com/reply?username=${u}&messageId=${m}`;
+  return `loxation://reply?username=${u}&messageId=${m}`;
 }
 
-// iOS reply URL - uses different domain to trigger Universal Links
-// (iOS blocks Universal Links for same-domain navigation)
-function replyUrlIOS(username, messageId) {
+// HTTPS URL for web fallback page (also Universal Link host)
+function replyUrlHTTPS(username, messageId) {
   const u = encodeURIComponent(username);
   const m = encodeURIComponent(messageId);
   return `https://public.loxation.com/reply?username=${u}&messageId=${m}`;
 }
 
-// Platform detection
-const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+// Android intent:// URL with Play Store fallback
+function replyUrlAndroid(username, messageId) {
+  const u = encodeURIComponent(username);
+  const m = encodeURIComponent(messageId);
+  const fallback = encodeURIComponent('https://play.google.com/store/apps/details?id=com.jabresearch.loxation');
+  return `intent://reply?username=${u}&messageId=${m}#Intent;scheme=loxation;package=com.jabresearch.loxation;S.browser_fallback_url=${fallback};end`;
+}
+
+/**
+ * Get the appropriate reply URL based on platform
+ * - iOS Safari: HTTPS Universal Link (cross-domain triggers app)
+ * - iOS Chrome: Custom scheme with fallback handling via onclick
+ * - Android: Intent URL with Play Store fallback
+ * - Desktop: HTTPS to web page
+ */
+function getReplyUrl(username, messageId) {
+  if (isAndroid) {
+    return replyUrlAndroid(username, messageId);
+  }
+  // For iOS Chrome, we return HTTPS but handle click specially
+  // For iOS Safari, HTTPS Universal Link works
+  // For desktop, HTTPS to web page
+  return replyUrlHTTPS(username, messageId);
+}
+
+/**
+ * Handle Reply button click - special handling for iOS non-Safari browsers
+ * iOS Safari supports Universal Links, but all other iOS browsers (Chrome, Firefox, etc.)
+ * need custom scheme with fallback to web page
+ */
+function handleReplyClick(event, username, messageId) {
+  if (!isIOSNotSafari) {
+    // Let the default href work:
+    // - iOS Safari: Universal Link opens app
+    // - Android: intent:// opens app with Play Store fallback
+    // - Desktop: opens web page
+    return true;
+  }
+  
+  // iOS non-Safari browser: try custom scheme with fallback
+  event.preventDefault();
+  
+  const customUrl = replyUrlCustomScheme(username, messageId);
+  const fallbackUrl = replyUrlHTTPS(username, messageId);
+  
+  openAppWithFallback(customUrl, fallbackUrl);
+  return false;
+}
+
+/**
+ * Attempt to open app via custom scheme with web fallback
+ * Used for iOS Chrome where Universal Links don't work
+ */
+function openAppWithFallback(customSchemeUrl, fallbackWebUrl) {
+  // Record when we started
+  const startTime = Date.now();
+  
+  // Flag to track if user interaction happened (page visibility changed)
+  let userLeftPage = false;
+  
+  // Listen for visibility change (indicates app might be opening)
+  const handleVisibilityChange = () => {
+    if (document.hidden) {
+      userLeftPage = true;
+    }
+  };
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  
+  // Attempt to open the custom scheme
+  window.location.href = customSchemeUrl;
+  
+  // After timeout, check if we should redirect to fallback
+  setTimeout(() => {
+    document.removeEventListener('visibilitychange', handleVisibilityChange);
+    
+    // Only redirect if:
+    // 1. User didn't leave the page (app didn't open)
+    // 2. Page is still visible
+    // 3. Enough time has passed (not instant failure)
+    const elapsed = Date.now() - startTime;
+    if (!userLeftPage && !document.hidden && elapsed >= 1400) {
+      // App probably not installed - redirect to web fallback
+      console.log('[openAppWithFallback] App did not open, redirecting to fallback');
+      window.location.href = fallbackWebUrl;
+    }
+  }, 1500);
+}
+
+// Make handleReplyClick available globally for onclick handlers
+window.handleReplyClick = handleReplyClick;
 
 /**
  * Render media element for a post
@@ -479,7 +589,10 @@ function renderPosts(posts) {
       ${renderMedia(p.media)}
       <div class="content" data-full="${escapeText(full)}" data-snippet="${escapeText(snippet)}">${escapeText(snippet)}</div>
       <div class="actions">
-        <a class="btn" href="${isIOS ? replyUrlIOS(username, messageId) : replyUrl(username, messageId)}">Reply (in app)</a>
+        <a class="btn reply-btn" href="${getReplyUrl(username, messageId)}"
+           data-username="${escapeText(username)}"
+           data-messageid="${escapeText(messageId)}"
+           onclick="return window.handleReplyClick(event, this.dataset.username, this.dataset.messageid)">Reply (in app)</a>
         ${hasMore && !hasMedia ? '<button class="btn toggle">Show full</button>' : ''}
         ${hasLocation ? `<button class="btn btn-map" data-h3="${escapeText(p.geolocatorH3)}" data-accuracy="${p.accuracyM || ''}">Show on map</button>` : ''}
       </div>
