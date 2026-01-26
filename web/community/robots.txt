@@ -1,0 +1,10 @@
+# robots.txt for Your community
+User-agent: *
+Allow: /
+Disallow: /reply
+
+# Sitemap location
+Sitemap: https://community.loxation.com/sitemap.xml
+
+# Crawl-delay (optional, be polite to servers)
+Crawl-delay: 1

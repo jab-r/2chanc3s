@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Reply in Loxation</title>
+
+    <!-- Primary Meta Tags -->
+    <meta name="description" content="Reply privately to this post through the Loxation app. Download now to connect." />
+    <meta name="robots" content="noindex, follow" />
+
+    <!-- Favicon and Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Reply in Loxation" />
+    <meta property="og:description" content="Someone posted nearby. Reply privately through the Loxation app." />
+    <meta property="og:image" content="https://community.loxation.com/og-image.png" />
+    <meta property="og:site_name" content="Your community" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Reply in Loxation" />
+    <meta name="twitter:description" content="Someone posted nearby. Reply privately through the Loxation app." />
+    <meta name="twitter:image" content="https://community.loxation.com/og-image.png" />
+
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#007aff" />
+
+    <!-- iOS Smart App Banner: auto-shows native banner when app is installed -->
+    <meta name="apple-itunes-app" content="app-id=6743818003" id="smartBanner" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <header class="top">
+      <h1>Reply</h1>
+      <div class="tag">private reply happens in the app</div>
+    </header>
+
+    <main class="wrap">
+      <section class="panel">
+        <div id="target" class="mono"></div>
+        <div class="row">
+          <a id="btnOpen" class="btn">Open in app</a>
+        </div>
+        <div class="store-badges" style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center; justify-content: center; flex-wrap: wrap;">
+          <span>Get Loxation:</span>
+          <a id="btnIos" href="https://apps.apple.com/us/app/loxation/id6743818003">
+            <img src="/Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg" alt="Download on the App Store" style="height: 40px; width: auto;">
+          </a>
+          <a id="btnAndroid" href="https://play.google.com/store/apps/details?id=com.jabresearch.loxation">
+            <img src="/GetItOnGooglePlay_Badge_Web_color_English.svg" alt="Get it on Google Play" style="height: 40px; width: auto;">
+          </a>
+        </div>
+        <p class="small">
+          If the app is installed, tap "Open in app" or use the banner above.
+        </p>
+      </section>
+    </main>
+
+    <script type="module">
+      const params = new URLSearchParams(location.search);
+      const username = (params.get('username') || '').trim();
+      const messageId = (params.get('messageId') || '').trim();
+
+      const target = document.getElementById('target');
+      target.textContent = `@${username}  —  messageId: ${messageId}`;
+
+      // Build custom URL scheme for direct app opening
+      const customSchemeUrl = `loxation://reply?username=${encodeURIComponent(username)}&messageId=${encodeURIComponent(messageId)}`;
+
+      // Update Smart App Banner with app-argument to pass deep link data
+      const smartBanner = document.getElementById('smartBanner');
+      smartBanner.content = `app-id=6743818003, app-argument=${customSchemeUrl}`;
+
+      // Basic platform hint: if on iOS hide Android and vice-versa.
+      const ua = navigator.userAgent || '';
+      const isAndroid = /Android/i.test(ua);
+      const isIOS = /iPhone|iPad|iPod/i.test(ua);
+      if (isAndroid && !isIOS) document.getElementById('btnIos').style.display = 'none';
+      if (isIOS && !isAndroid) document.getElementById('btnAndroid').style.display = 'none';
+
+      // "Open in app" button - use custom scheme (opens app directly)
+      const btnOpen = document.getElementById('btnOpen');
+      btnOpen.href = customSchemeUrl;
+
+      // On Android, use intent:// scheme with fallback to Play Store
+      if (isAndroid) {
+        const intentUrl = `intent://reply?username=${encodeURIComponent(username)}&messageId=${encodeURIComponent(messageId)}#Intent;scheme=loxation;package=com.jabresearch.loxation;S.browser_fallback_url=https://play.google.com/store/apps/details?id=com.jabresearch.loxation;end`;
+        btnOpen.href = intentUrl;
+      }
+    </script>
+  </body>
+</html>

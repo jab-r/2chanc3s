@@ -136,12 +136,12 @@ Authorization: Bearer <your-jwt-token>
 
 #### Protected Live Streams
 
-For MLS-protected live streaming, use `contentType: 'video/x-live'`. This creates a live input with a signed playback URL that can be encrypted and distributed via MLS/Nostr.
+For MLS-protected live streaming, use `contentType: 'video/application/vnd.loxation.live+json'`. This creates a live input with a signed playback URL that can be encrypted and distributed via MLS/Nostr.
 
 **Request Body (Protected Live Stream):**
 ```json
 {
-  "contentType": "video/x-live",
+  "contentType": "video/application/vnd.loxation.live+json",
   "title": "Private stream for group",
   "recordToVod": false
 }

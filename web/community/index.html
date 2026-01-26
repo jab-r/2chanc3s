@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>Your community</title>
+
+    <!-- Primary Meta Tags -->
+    <meta name="description" content="Your community - Browse and reply to posts near you. Connect with people in your local area." />
+    <meta name="keywords" content="community, local, nearby, location-based, connect" />
+    <meta name="author" content="Loxation" />
+    <meta name="robots" content="index, follow" />
+    <link rel="canonical" href="https://community.loxation.com/" />
+
+    <!-- Favicon and Icons -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://community.loxation.com/" />
+    <meta property="og:title" content="Your community" />
+    <meta property="og:description" content="Browse and reply to posts near you. Connect with people in your local area." />
+    <meta property="og:image" content="https://community.loxation.com/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:site_name" content="Your community" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:url" content="https://community.loxation.com/" />
+    <meta name="twitter:title" content="Your community" />
+    <meta name="twitter:description" content="Connect with people in your local area." />
+    <meta name="twitter:image" content="https://community.loxation.com/og-image.png" />
+
+    <!-- Theme Color for mobile browsers -->
+    <meta name="theme-color" content="#007aff" />
+
+    <!-- iOS Smart App Banner -->
+    <meta name="apple-itunes-app" content="app-id=6743818003" />
+
+    <!-- Structured Data - WebApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "WebApplication",
+      "name": "Your community",
+      "url": "https://community.loxation.com",
+      "description": "Connect with people in your local area. Browse and reply to posts near you.",
+      "applicationCategory": "SocialNetworkingApplication",
+      "operatingSystem": "Web, iOS, Android",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "sameAs": [
+        "https://apps.apple.com/us/app/loxation/id6743818003",
+        "https://play.google.com/store/apps/details?id=com.jabresearch.loxation"
+      ]
+    }
+    </script>
+
+    <link rel="stylesheet" href="/style.css" />
+    <!-- Leaflet CSS for maps -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+          integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+          crossorigin="" />
+    <!-- Import map to resolve h3-js from CDN -->
+    <script type="importmap">
+      {
+        "imports": {
+          "h3-js": "https://esm.sh/h3-js@4.1.0"
+        }
+      }
+    </script>
+  </head>
+  <body>
+    <header class="top">
+      <div class="header-main">
+        <h1><a href="/">Your community</a></h1>
+        <div class="tag">nearby</div>
+      </div>
+      <nav class="nav">
+        <a href="/about.html">About</a>
+        <a href="/favorites.html">Favorites</a>
+      </nav>
+    </header>
+
+    <main class="wrap">
+      <section class="panel">
+        <div class="row">
+          <input id="address" type="text" placeholder="City or address (e.g. Cincinnati OH)" />
+          <button id="btnGeocode">Set Location</button>
+          <span class="or-sep">or</span>
+          <button id="btnLocate">Use GPS</button>
+        </div>
+
+        <div class="row">
+          <label class="inline">
+            radius
+            <select id="k">
+              <option value="1">Nearby ~5km</option>
+              <option value="3">Local ~12km</option>
+              <option value="5">District ~20km</option>
+              <option value="10" selected>Metro ~40km</option>
+              <option value="15">Region ~60km</option>
+            </select>
+          </label>
+          <label class="inline">
+            limit
+            <select id="limit">
+              <option value="25">25</option>
+              <option value="50" selected>50</option>
+              <option value="100">100</option>
+            </select>
+          </label>
+        </div>
+
+        <div class="row">
+          <input id="search" type="search" placeholder="search posts… or @username" />
+          <button id="btnSearch">Search</button>
+          <button id="btnClear">Clear</button>
+        </div>
+
+        <div id="status" class="status"></div>
+        <div id="locInfo" class="loc-info"></div>
+      </section>
+
+      <section id="list" class="list"></section>
+    </main>
+
+    <footer class="foot">
+      <div class="store-badges">
+        Reply requires the Loxation app.
+        <a href="https://apps.apple.com/us/app/loxation/id6743818003">
+          <img src="/Download_on_the_App_Store_Badge_US-UK_RGB_blk_092917.svg" alt="Download on the App Store" style="height: 32px; width: auto;">
+        </a>
+        <a href="https://play.google.com/store/apps/details?id=com.jabresearch.loxation">
+          <img src="/GetItOnGooglePlay_Badge_Web_color_English.svg" alt="Get it on Google Play" style="height: 32px; width: auto;">
+        </a>
+      </div>
+      <div class="version">v2026.01.26.1</div>
+    </footer>
+
+    <!-- Lightbox for full-size media -->
+    <div id="lightbox" class="lightbox hidden">
+      <button class="lightbox-close" aria-label="Close">&times;</button>
+      <div class="lightbox-content">
+        <img id="lightbox-img" alt="Full size image" />
+        <video id="lightbox-video" controls playsinline></video>
+      </div>
+    </div>
+
+    <!-- HLS.js for video streaming (non-Safari browsers) -->
+    <script src="https://cdn.jsdelivr.net/npm/hls.js@1/dist/hls.min.js"></script>
+    <!-- Leaflet JS for maps -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+            integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+            crossorigin=""></script>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

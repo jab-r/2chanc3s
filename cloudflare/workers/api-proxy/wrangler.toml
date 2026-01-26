@@ -2,10 +2,11 @@ name = "2chanc3s-api-proxy"
 main = "src/index.ts"
 compatibility_date = "2025-12-01"
 
-# If the Cloudflare dashboard is not showing “Routes/Triggers”, let Wrangler attach the HTTP route.
-# This will bind the worker to `https://www.2chanc3s.com/api/*`.
+# If the Cloudflare dashboard is not showing "Routes/Triggers", let Wrangler attach the HTTP route.
+# This will bind the worker to `https://www.2chanc3s.com/api/*` and `https://community.loxation.com/api/*`.
 routes = [
-  { pattern = "www.2chanc3s.com/api/*", zone_name = "2chanc3s.com" }
+  { pattern = "www.2chanc3s.com/api/*", zone_name = "2chanc3s.com" },
+  { pattern = "community.loxation.com/api/*", zone_name = "loxation.com" }
 ]
 
 [vars]
