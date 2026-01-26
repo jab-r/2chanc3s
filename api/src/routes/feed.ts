@@ -185,13 +185,15 @@ async function queryInBatches(
 
 /**
  * Get the Firestore field name for a given H3 resolution
- * Server stores only: h3_res6 (~36km²), h3_res7 (~5km²)
- * Note: The redundant "h3" field was removed from loxation-server
+ * Server stores: h3_res6 (~36km²), h3_res7 (~5km²), h3_res8 (~0.74km²), h3_res9 (~0.11km²)
  */
 function getH3Field(resolution: number): string {
-  if (resolution === 6) return "geolocator.h3_res6";
-  // Default to h3_res7 for resolution 7 or any other value
-  return "geolocator.h3_res7";
+  switch (resolution) {
+    case 6: return "geolocator.h3_res6";
+    case 8: return "geolocator.h3_res8";
+    case 9: return "geolocator.h3_res9";
+    default: return "geolocator.h3_res7";
+  }
 }
 
 export function buildFeedRouter(): Router {
@@ -216,7 +218,8 @@ export function buildFeedRouter(): Router {
       const overfetch = Math.min(200, Math.max(limit * 3, 50));
 
       // New multi-resolution approach: single h3 param with resolution selector
-      const resolution = clampInt(req.query.resolution, 7, 6, 7);
+      // Supports res 6 (metro), 7 (district), 8 (neighborhood), 9 (block)
+      const resolution = clampInt(req.query.resolution, 7, 6, 9);
       const h3Cells = parseH3List(req.query.h3, 200);
       
       // Deprecated h3r7/h3r8 params - old cached web app versions may still use these.

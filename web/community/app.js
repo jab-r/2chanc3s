@@ -752,33 +752,47 @@ async function apiGet(path, params) {
 
 /**
  * Compute H3 tokens for a given location using multi-resolution approach.
- * Server now stores h3_res6 (~36 km², metro) and h3_res7 (~5 km², district).
+ * Server stores h3_res6 (~36km²), h3_res7 (~5km²), h3_res8 (~0.74km²), h3_res9 (~0.11km²).
  *
- * Strategy:
- * - k <= 3: use resolution 7 for district-level precision
- * - k >= 5: use resolution 6 for metro-level efficiency (fewer cells)
+ * Strategy (optimized for query efficiency and precision):
+ * - k=0: use resolution 9 for block-level precision (~330m cell edge)
+ * - k=1: use resolution 8 for neighborhood precision (~1.2km cell edge)
+ * - k=2-4: use resolution 7 for district-level precision (~3.2km cell edge)
+ * - k>=5: use resolution 6 for metro-level efficiency (~8.5km cell edge)
  *
- * With multi-resolution, we only need small k-rings (0-2) at the appropriate resolution.
+ * Coverage examples:
+ * - res9 k=1: ~1km diameter (7 cells) - walking distance
+ * - res8 k=1: ~4km diameter (7 cells) - neighborhood
+ * - res7 k=2: ~20km diameter (19 cells) - district
+ * - res6 k=2: ~50km diameter (19 cells) - metro
  */
 function computeH3Tokens(lat, lng, k) {
   // Choose resolution and effective k based on search radius
   // For larger areas, use coarser resolution with smaller k-ring
   let resolution, effectiveK;
-  
+
   if (k >= 5) {
-    // Metro scale: use res 6 (~36 km² per cell)
-    // k=5 at res7 ≈ k=1 at res6, k=10 at res7 ≈ k=2 at res6
+    // Metro scale: use res 6 (~36 km² per cell, edge ~8.5km)
     resolution = 6;
     effectiveK = Math.min(Math.ceil(k / 5), 3); // Cap at k=3 for res6
-  } else {
-    // District scale: use res 7 (~5 km² per cell)
+  } else if (k >= 2) {
+    // District scale: use res 7 (~5 km² per cell, edge ~3.2km)
     resolution = 7;
     effectiveK = k;
+  } else if (k === 1) {
+    // Neighborhood scale: use res 8 (~0.74 km² per cell, edge ~1.2km)
+    resolution = 8;
+    effectiveK = 1;
+  } else {
+    // Block scale (k=0): use res 9 (~0.11 km² per cell, edge ~330m)
+    // Still use k=1 to get adjacent cells for better coverage
+    resolution = 9;
+    effectiveK = 1;
   }
-  
+
   const centerCell = latLngToCell(lat, lng, resolution);
   const cells = Array.from(gridDisk(centerCell, effectiveK));
-  
+
   return {
     cells,
     resolution,
@@ -873,7 +887,8 @@ async function loadFeed() {
   try {
     const data = await apiGet('/api/feed', params);
     renderPosts(data.posts);
-    const resLabel = lastH3.resolution === 6 ? 'metro (res6)' : 'district (res7)';
+    const resLabels = { 6: 'metro', 7: 'district', 8: 'neighborhood', 9: 'block' };
+    const resLabel = `${resLabels[lastH3.resolution] || 'res' + lastH3.resolution} (res${lastH3.resolution})`;
     setStatus(`Loaded ${data.posts.length} posts (${lastH3.cells.length} cells, ${resLabel})`);
   } catch (e) {
     setStatus(`Error: ${e.message}`);
