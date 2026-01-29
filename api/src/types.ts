@@ -13,6 +13,10 @@ export type PostDoc = {
   } | null;
   locationSource?: "device" | "userProvided";
   geolocatorStatus?: "resolved" | "missing_device_location";
+  // Identity link fields for anonymous/semi-anonymous posts
+  replyLinkHandle?: string | null;   // UUID for identity link server lookup
+  replyLinkEntropy?: string | null;  // base64url-encoded entropy for client-side decryption
+  displayName?: string | null;       // Display name for anonymous posts (e.g., "Anonymous")
 };
 
 export type MediaInfo = {
@@ -31,7 +35,7 @@ export type MediaInfo = {
 };
 
 export type PublicPost = {
-  username: string;
+  username?: string | null;  // Optional for anonymous posts
   messageId: string;
   time: string;
   content: string;
@@ -39,4 +43,8 @@ export type PublicPost = {
   media?: MediaInfo;
   geolocatorH3?: string;
   accuracyM?: number;
+  // Identity link fields for anonymous posts
+  replyLinkHandle?: string | null;
+  replyLinkEntropy?: string | null;
+  displayName?: string | null;
 };

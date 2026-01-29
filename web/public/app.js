@@ -195,6 +195,77 @@ async function generateQRCodeDataUrl(url) {
 }
 
 /**
+ * Decode base64url string to Uint8Array
+ * @param {string} str - base64url encoded string
+ * @returns {Uint8Array}
+ */
+function base64urlToBytes(str) {
+  // Replace base64url chars with standard base64
+  const base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  // Add padding if needed
+  const padded = base64 + '==='.slice(0, (4 - base64.length % 4) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
+/**
+ * Convert UUID string to 16-byte Uint8Array
+ * @param {string} uuid - UUID string (with or without dashes)
+ * @returns {Uint8Array}
+ */
+function uuidToBytes(uuid) {
+  const hex = uuid.replace(/-/g, '');
+  const bytes = new Uint8Array(16);
+  for (let i = 0; i < 16; i++) {
+    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
+}
+
+/**
+ * Encode Uint8Array to base64url string
+ * @param {Uint8Array} bytes
+ * @returns {string}
+ */
+function bytesToBase64url(bytes) {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  const base64 = btoa(binary);
+  // Convert to base64url: replace + with -, / with _, remove padding
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/**
+ * Generate identity link QR code URL from entropy and handle
+ * Format: loxation://m/#eu/{base64url(entropy + handle)}
+ * @param {string} entropy - base64url-encoded 32-byte entropy
+ * @param {string} handle - UUID string (16 bytes)
+ * @returns {string} The identity link URL
+ */
+function getIdentityLinkQRUrl(entropy, handle) {
+  // Decode entropy from base64url to bytes (32 bytes)
+  const entropyBytes = base64urlToBytes(entropy);
+  // Convert handle UUID to bytes (16 bytes)
+  const handleBytes = uuidToBytes(handle);
+
+  // Concatenate: 32 bytes entropy + 16 bytes handle = 48 bytes
+  const combined = new Uint8Array(48);
+  combined.set(entropyBytes, 0);
+  combined.set(handleBytes, 32);
+
+  // Encode as base64url
+  const encoded = bytesToBase64url(combined);
+
+  return `loxation://m/#eu/${encoded}`;
+}
+
+/**
  * Render media element for a post
  * @param {Object} media - Media info from API {type, thumbnail, medium, large, public, stream, duration}
  * @returns {string} HTML string for the media element
@@ -522,13 +593,37 @@ const qrModalTarget = qrModal?.querySelector('.qr-modal-target');
  * @param {string} username - The post author's username
  * @param {string} messageId - The message ID
  */
-async function showQRModal(username, messageId) {
+/**
+ * Show QR code modal for replying to a post
+ * Supports both username-based and identity link posts
+ * @param {string|null} username - The post author's username (null for anonymous)
+ * @param {string} messageId - The message ID
+ * @param {string|null} replyLinkHandle - Identity link handle (for anonymous posts)
+ * @param {string|null} replyLinkEntropy - Identity link entropy (for anonymous posts)
+ * @param {string|null} displayName - Display name for anonymous posts
+ */
+async function showQRModal(username, messageId, replyLinkHandle = null, replyLinkEntropy = null, displayName = null) {
   if (!qrModal || !qrModalImg) {
     console.error('[QRModal] Modal elements not found');
     return;
   }
 
-  const url = `loxation://reply?username=${encodeURIComponent(username)}&messageId=${encodeURIComponent(messageId)}`;
+  let url;
+  let targetText;
+
+  if (replyLinkHandle && replyLinkEntropy) {
+    // Identity link (anonymous post)
+    url = getIdentityLinkQRUrl(replyLinkEntropy, replyLinkHandle);
+    targetText = displayName || 'Anonymous';
+  } else if (username) {
+    // Username-based reply
+    url = `loxation://reply?username=${encodeURIComponent(username)}&messageId=${encodeURIComponent(messageId)}`;
+    targetText = `@${username}`;
+  } else {
+    console.error('[QRModal] No username or identity link provided');
+    return;
+  }
+
   const dataUrl = await generateQRCodeDataUrl(url);
 
   if (!dataUrl) {
@@ -537,7 +632,7 @@ async function showQRModal(username, messageId) {
   }
 
   if (qrModalTarget) {
-    qrModalTarget.textContent = `@${username}`;
+    qrModalTarget.textContent = targetText;
   }
   qrModalImg.src = dataUrl;
   qrModal.classList.remove('hidden');
@@ -652,30 +747,45 @@ function renderPosts(posts) {
   }
 
   for (const p of posts) {
-    const username = p.username;
+    const username = p.username || null;
     const messageId = p.messageId;
+    const replyLinkHandle = p.replyLinkHandle || null;
+    const replyLinkEntropy = p.replyLinkEntropy || null;
+    const displayName = p.displayName || null;
+    const hasIdentityLink = replyLinkHandle && replyLinkEntropy;
+
+    // Display name: username if available, otherwise displayName or "Anonymous"
+    const authorDisplay = username ? `@${username}` : (displayName || 'Anonymous');
+
+    // Compute reply deeplink URL - works for both username and identity link posts
+    const replyDeeplinkUrl = username
+      ? getReplyUrl(username, messageId)
+      : (hasIdentityLink ? getIdentityLinkQRUrl(replyLinkEntropy, replyLinkHandle) : null);
+
     const full = p.content || '';
     const snippet = full.length > 240 ? full.slice(0, 240) + '…' : full;
     const hasMore = full.length > snippet.length;
     const hasMedia = p.media && (p.media.type === 'image' || p.media.type === 'video' || p.media.type === 'live');
     const hasLocation = p.geolocatorH3;
 
+    // Build QR button data attributes
+    const qrDataAttrs = username
+      ? `data-username="${escapeText(username)}" data-messageid="${escapeText(messageId)}"`
+      : `data-messageid="${escapeText(messageId)}" data-handle="${escapeText(replyLinkHandle || '')}" data-entropy="${escapeText(replyLinkEntropy || '')}" data-displayname="${escapeText(displayName || '')}"`;
+
     const el = document.createElement('div');
     el.className = 'post';
     el.innerHTML = `
       <div class="meta">
-        <div>@${escapeText(username)}</div>
+        <div>${escapeText(authorDisplay)}</div>
         <div>${escapeText(fmtTime(p.time))}</div>
         <div class="mono">id: ${escapeText(messageId)}</div>
       </div>
       ${renderMedia(p.media)}
       <div class="content" data-full="${escapeText(full)}" data-snippet="${escapeText(snippet)}">${escapeText(snippet)}</div>
       <div class="actions">
-        <a class="btn reply-btn" href="${getReplyUrl(username, messageId)}"
-           data-username="${escapeText(username)}"
-           data-messageid="${escapeText(messageId)}"
-           onclick="return window.handleReplyClick(event, this.dataset.username, this.dataset.messageid)">Reply (in app)</a>
-        ${isDesktop ? `<button class="btn btn-qr" data-username="${escapeText(username)}" data-messageid="${escapeText(messageId)}">Scan QR</button>` : ''}
+        ${replyDeeplinkUrl ? `<a class="btn reply-btn" href="${replyDeeplinkUrl}">Reply (in app)</a>` : ''}
+        ${isDesktop ? `<button class="btn btn-qr" ${qrDataAttrs}>Scan QR</button>` : ''}
         ${hasMore && !hasMedia ? '<button class="btn toggle">Show full</button>' : ''}
         ${hasLocation ? `<button class="btn btn-map" data-h3="${escapeText(p.geolocatorH3)}" data-accuracy="${p.accuracyM || ''}">Show on map</button>` : ''}
       </div>
@@ -734,9 +844,12 @@ function renderPosts(posts) {
     const qrBtn = el.querySelector('.btn-qr');
     if (qrBtn) {
       qrBtn.addEventListener('click', async () => {
-        const qrUsername = qrBtn.dataset.username;
+        const qrUsername = qrBtn.dataset.username || null;
         const qrMessageId = qrBtn.dataset.messageid;
-        await showQRModal(qrUsername, qrMessageId);
+        const qrHandle = qrBtn.dataset.handle || null;
+        const qrEntropy = qrBtn.dataset.entropy || null;
+        const qrDisplayName = qrBtn.dataset.displayname || null;
+        await showQRModal(qrUsername, qrMessageId, qrHandle, qrEntropy, qrDisplayName);
       });
     }
 

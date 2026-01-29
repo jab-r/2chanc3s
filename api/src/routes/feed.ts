@@ -113,21 +113,28 @@ async function resolveMediaUrls(mediaIds: string[]): Promise<Map<string, MediaIn
 }
 
 function toPublicPost(doc: PostDoc, mediaInfo?: MediaInfo): PublicPost | null {
-  const username = typeof doc.username === "string" ? doc.username.trim() : "";
-  if (!username) return null;
+  const username = typeof doc.username === "string" ? doc.username.trim() : null;
+  const hasIdentityLink = doc.replyLinkHandle && doc.replyLinkEntropy;
+
+  // Must have either username OR identity link to be replyable
+  if (!username && !hasIdentityLink) return null;
   if (typeof doc.messageId !== "string" || doc.messageId.trim() === "") return null;
   if (typeof doc.time !== "string" || doc.time.trim() === "") return null;
   if (typeof doc.content !== "string") return null;
 
   return {
-    username,
+    username: username || null,
     messageId: doc.messageId,
     time: doc.time,
     content: doc.content,
     contentType: doc.contentType || 'text/plain',
     media: mediaInfo,
     geolocatorH3: doc.geolocator?.h3_res7,
-    accuracyM: doc.geolocator?.accuracyM
+    accuracyM: doc.geolocator?.accuracyM,
+    // Include identity link fields for anonymous posts
+    replyLinkHandle: doc.replyLinkHandle || null,
+    replyLinkEntropy: doc.replyLinkEntropy || null,
+    displayName: doc.displayName || null
   };
 }
 
