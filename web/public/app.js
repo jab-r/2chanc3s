@@ -60,7 +60,10 @@ const isIOSSafari = isIOS && /Safari/i.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS|Br
 // Any iOS browser that's NOT Safari needs custom scheme fallback
 const isIOSNotSafari = isIOS && !isIOSSafari;
 
-console.log('[Platform]', { isIOS, isAndroid, isIOSSafari, isIOSNotSafari, ua: ua.substring(0, 120) });
+// Desktop detection: not iOS, not Android
+const isDesktop = !isIOS && !isAndroid;
+
+console.log('[Platform]', { isIOS, isAndroid, isIOSSafari, isIOSNotSafari, isDesktop, ua: ua.substring(0, 120) });
 
 // ====== REPLY URL GENERATORS ======
 
@@ -168,6 +171,31 @@ function openAppWithFallback(customSchemeUrl, fallbackWebUrl) {
 
 // Make handleReplyClick available globally for onclick handlers
 window.handleReplyClick = handleReplyClick;
+
+// ====== QR CODE GENERATION ======
+
+/**
+ * Generate QR code as data URL for desktop reply
+ * @param {string} url - The URL to encode in the QR code
+ * @returns {Promise<string|null>} Data URL of the QR code image, or null on error
+ */
+async function generateQRCodeDataUrl(url) {
+  if (typeof QRCode === 'undefined') {
+    console.error('[QRCode] Library not loaded');
+    return null;
+  }
+  try {
+    return await QRCode.toDataURL(url, {
+      width: 180,
+      margin: 2,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#1a1a1a', light: '#fffdf7' }
+    });
+  } catch (err) {
+    console.error('[QRCode] Generation failed:', err);
+    return null;
+  }
+}
 
 /**
  * Render media element for a post
@@ -486,6 +514,63 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') closeLightbox();
 });
 
+// ====== QR CODE MODAL ======
+
+const qrModal = document.getElementById('qr-modal');
+const qrModalImg = document.getElementById('qr-modal-img');
+const qrModalTarget = qrModal?.querySelector('.qr-modal-target');
+
+/**
+ * Show QR code modal for replying to a post
+ * @param {string} username - The post author's username
+ * @param {string} messageId - The message ID
+ */
+async function showQRModal(username, messageId) {
+  if (!qrModal || !qrModalImg) {
+    console.error('[QRModal] Modal elements not found');
+    return;
+  }
+
+  const url = `loxation://reply?username=${encodeURIComponent(username)}&messageId=${encodeURIComponent(messageId)}`;
+  const dataUrl = await generateQRCodeDataUrl(url);
+
+  if (!dataUrl) {
+    console.error('[QRModal] Failed to generate QR code');
+    return;
+  }
+
+  if (qrModalTarget) {
+    qrModalTarget.textContent = `@${username}`;
+  }
+  qrModalImg.src = dataUrl;
+  qrModal.classList.remove('hidden');
+}
+
+function hideQRModal() {
+  if (qrModal) {
+    qrModal.classList.add('hidden');
+    if (qrModalImg) qrModalImg.src = '';
+  }
+}
+
+// Initialize QR modal event listeners
+document.addEventListener('DOMContentLoaded', () => {
+  if (qrModal) {
+    const closeBtn = qrModal.querySelector('.qr-modal-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', hideQRModal);
+    }
+    qrModal.addEventListener('click', (e) => {
+      if (e.target === qrModal) hideQRModal();
+    });
+  }
+});
+
+// Close QR modal on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') hideQRModal();
+});
+
 /**
  * Initialize and render a map showing H3 cell and accuracy circle
  * @param {HTMLElement} container - The map container element
@@ -593,6 +678,7 @@ function renderPosts(posts) {
            data-username="${escapeText(username)}"
            data-messageid="${escapeText(messageId)}"
            onclick="return window.handleReplyClick(event, this.dataset.username, this.dataset.messageid)">Reply (in app)</a>
+        ${isDesktop ? `<button class="btn btn-qr" data-username="${escapeText(username)}" data-messageid="${escapeText(messageId)}">Scan QR</button>` : ''}
         ${hasMore && !hasMedia ? '<button class="btn toggle">Show full</button>' : ''}
         ${hasLocation ? `<button class="btn btn-map" data-h3="${escapeText(p.geolocatorH3)}" data-accuracy="${p.accuracyM || ''}">Show on map</button>` : ''}
       </div>
@@ -624,19 +710,19 @@ function renderPosts(posts) {
         const container = el.querySelector('.post-map-container');
         const mapDiv = el.querySelector('.post-map');
         const isExpanded = container.classList.contains('expanded');
-        
+
         if (isExpanded) {
           container.classList.remove('expanded');
           mapBtn.textContent = 'Show on map';
         } else {
           container.classList.add('expanded');
           mapBtn.textContent = 'Hide map';
-          
+
           // Lazy init map on first expand
           if (!mapDiv.dataset.initialized) {
             const h3Cell = mapBtn.dataset.h3;
             const accuracy = mapBtn.dataset.accuracy ? parseFloat(mapBtn.dataset.accuracy) : undefined;
-            
+
             // Small delay to let CSS transition start and container have dimensions
             setTimeout(() => {
               initPostMap(mapDiv, h3Cell, accuracy);
@@ -646,7 +732,17 @@ function renderPosts(posts) {
         }
       });
     }
-    
+
+    // QR code button for desktop reply
+    const qrBtn = el.querySelector('.btn-qr');
+    if (qrBtn) {
+      qrBtn.addEventListener('click', async () => {
+        const qrUsername = qrBtn.dataset.username;
+        const qrMessageId = qrBtn.dataset.messageid;
+        await showQRModal(qrUsername, qrMessageId);
+      });
+    }
+
     listEl.appendChild(el);
   }
   

@@ -29,11 +29,16 @@ Additional simplification:
 ```ts
 {
   deviceId: string,
-  username?: string | null,
   messageId: string,
   time: string,                 // ISO timestamp (or serverTimestamp)
   content: string,
   contentType: string,          // defaults to 'text/plain', or MIME type for media
+
+  // Identity fields (at least one of username OR replyLink fields required)
+  username?: string | null,              // Public identity for reply deeplink
+  replyLinkHandle?: string | null,       // UUID for identity link server lookup
+  replyLinkEntropy?: string | null,      // base64url key for client-side decryption
+  displayName?: string | null,           // Display name for anonymous posts
 
   // Privacy-first derived location. Raw coordinates are NOT stored in the post.
   geolocator?: {
@@ -75,11 +80,40 @@ Requires `Authorization: Bearer <token>`.
 }
 ```
 
+**Semi-anonymous post example:**
+
+```json
+{
+  "message": "Hot take about...",
+  "messageId": "client-generated-id",
+  "contentType": "text/plain",
+  "replyLinkHandle": "550e8400-e29b-41d4-a716-446655440000",
+  "replyLinkEntropy": "dGhpcyBpcyBhIGJhc2U2NHVybCBlbmNvZGVkIGtleQ",
+  "displayName": "A local resident"
+}
+```
+
 #### Fields
-- `message` (required): string content.
+
+- `message` (required for text posts): string content.
 - `messageId` (required): client-generated id for idempotency.
-- `username` (required): client username to display post by and enable responding.
 - `contentType` (optional): defaults to `text/plain`. Use MIME types like `image/jpeg` or `video/mp4` for media posts.
+
+**Identity fields** (at least one identity method required):
+
+- `username` (conditionally required): public username for display and `loxation://reply?username=X` deeplink.
+- `replyLinkHandle` (conditionally required): UUID for identity link server lookup. Must be paired with `replyLinkEntropy`.
+- `replyLinkEntropy` (conditionally required): base64url-encoded key for client-side decryption. Must be paired with `replyLinkHandle`.
+- `displayName` (optional): display name for semi-anonymous posts (e.g., "Anonymous", "A local resident").
+
+**Validation rules:**
+
+- At least one of `username` OR (`replyLinkHandle` + `replyLinkEntropy`) must be provided
+- Both can be provided (public identity with QR option)
+- `replyLinkHandle` and `replyLinkEntropy` must both be present or both absent
+
+**Other fields:**
+
 - `location` (optional, nullable):
   - If omitted or `null`, derive geolocator from device last-known location stored by the location subsystem.
   - If provided, it must be `{ latitude, longitude, accuracyM? }` and the server derives geolocator from these coordinates.
@@ -108,9 +142,29 @@ Requires `Authorization: Bearer <token>`.
 {
   "deviceId": "dev_...",
   "messageId": "client-generated-id",
+  "username": "johndoe",
   "time": "2026-01-09T15:00:00.000Z",
   "contentType": "text/plain",
-  "geolocatorStatus": "resolved"
+  "geolocatorStatus": "resolved",
+  "replyLinkHandle": null,
+  "replyLinkEntropy": null,
+  "displayName": null
+}
+```
+
+**Semi-anonymous post response:**
+
+```json
+{
+  "deviceId": "dev_...",
+  "messageId": "client-generated-id",
+  "username": null,
+  "time": "2026-01-09T15:00:00.000Z",
+  "contentType": "text/plain",
+  "geolocatorStatus": "resolved",
+  "replyLinkHandle": "550e8400-e29b-41d4-a716-446655440000",
+  "replyLinkEntropy": "dGhpcyBpcyBhIGJhc2U2NHVybCBlbmNvZGVkIGtleQ",
+  "displayName": "A local resident"
 }
 ```
 

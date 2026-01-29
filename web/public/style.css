@@ -297,6 +297,77 @@ input#address {
   display: block;
 }
 
+/* QR Code Modal */
+.qr-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.qr-modal.hidden {
+  display: none;
+}
+
+.qr-modal-content {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  padding: 24px;
+  max-width: 320px;
+  text-align: center;
+  position: relative;
+}
+
+.qr-modal-close {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  font-size: 24px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--ink);
+  line-height: 1;
+  padding: 4px;
+}
+
+.qr-modal-close:hover {
+  color: var(--accent);
+}
+
+.qr-modal h3 {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.qr-modal-target {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+  margin-bottom: 16px;
+  color: var(--ink);
+  opacity: 0.85;
+}
+
+.qr-modal-code img {
+  border-radius: 8px;
+}
+
+.qr-modal-hint {
+  font-size: 12px;
+  opacity: 0.7;
+  margin: 16px 0 0 0;
+}
+
+.qr-modal-badges {
+  margin-top: 16px;
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+}
+
 /* Post map styles */
 .post-map-container {
   margin: 0.75rem 0;
