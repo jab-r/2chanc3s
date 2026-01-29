@@ -1,4 +1,5 @@
 import { latLngToCell, gridDisk, cellToBoundary, cellToLatLng } from 'h3-js';
+import QRCode from 'qrcode';
 
 // Configure this to your Cloud Run URL, e.g. https://api-xxxxx-uc.a.run.app
 // If your Cloudflare Pages site proxies to the API, this can remain "".
@@ -180,10 +181,6 @@ window.handleReplyClick = handleReplyClick;
  * @returns {Promise<string|null>} Data URL of the QR code image, or null on error
  */
 async function generateQRCodeDataUrl(url) {
-  if (typeof QRCode === 'undefined') {
-    console.error('[QRCode] Library not loaded');
-    return null;
-  }
   try {
     return await QRCode.toDataURL(url, {
       width: 180,
