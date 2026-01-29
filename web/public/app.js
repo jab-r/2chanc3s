@@ -602,25 +602,14 @@ const qrModalTarget = qrModal?.querySelector('.qr-modal-target');
  * @param {string|null} replyLinkEntropy - Identity link entropy (for anonymous posts)
  * @param {string|null} displayName - Display name for anonymous posts
  */
-async function showQRModal(username, messageId, replyLinkHandle = null, replyLinkEntropy = null, displayName = null) {
+async function showQRModal(url, targetText) {
   if (!qrModal || !qrModalImg) {
     console.error('[QRModal] Modal elements not found');
     return;
   }
 
-  let url;
-  let targetText;
-
-  if (replyLinkHandle && replyLinkEntropy) {
-    // Identity link (anonymous post)
-    url = getIdentityLinkQRUrl(replyLinkEntropy, replyLinkHandle);
-    targetText = displayName || 'Anonymous';
-  } else if (username) {
-    // Username-based reply
-    url = `loxation://reply?username=${encodeURIComponent(username)}&messageId=${encodeURIComponent(messageId)}`;
-    targetText = `@${username}`;
-  } else {
-    console.error('[QRModal] No username or identity link provided');
+  if (!url) {
+    console.error('[QRModal] No URL provided');
     return;
   }
 
@@ -752,15 +741,21 @@ function renderPosts(posts) {
     const replyLinkHandle = p.replyLinkHandle || null;
     const replyLinkEntropy = p.replyLinkEntropy || null;
     const displayName = p.displayName || null;
-    const hasIdentityLink = replyLinkHandle && replyLinkEntropy;
+    const hasIdentityLink = !!(replyLinkHandle && replyLinkEntropy);
 
     // Display name: username if available, otherwise displayName or "Anonymous"
     const authorDisplay = username ? `@${username}` : (displayName || 'Anonymous');
 
-    // Compute reply deeplink URL - works for both username and identity link posts
-    const replyDeeplinkUrl = username
-      ? getReplyUrl(username, messageId)
-      : (hasIdentityLink ? getIdentityLinkQRUrl(replyLinkEntropy, replyLinkHandle) : null);
+    // Compute reply deeplink URL - use username if available, otherwise identity link
+    let replyDeeplinkUrl = null;
+    if (username) {
+      replyDeeplinkUrl = getReplyUrl(username, messageId);
+    } else if (hasIdentityLink) {
+      replyDeeplinkUrl = getIdentityLinkQRUrl(replyLinkEntropy, replyLinkHandle);
+    }
+
+    // Can this post be replied to?
+    const canReply = !!(replyDeeplinkUrl);
 
     const full = p.content || '';
     const snippet = full.length > 240 ? full.slice(0, 240) + '…' : full;
@@ -768,10 +763,10 @@ function renderPosts(posts) {
     const hasMedia = p.media && (p.media.type === 'image' || p.media.type === 'video' || p.media.type === 'live');
     const hasLocation = p.geolocatorH3;
 
-    // Build QR button data attributes
-    const qrDataAttrs = username
-      ? `data-username="${escapeText(username)}" data-messageid="${escapeText(messageId)}"`
-      : `data-messageid="${escapeText(messageId)}" data-handle="${escapeText(replyLinkHandle || '')}" data-entropy="${escapeText(replyLinkEntropy || '')}" data-displayname="${escapeText(displayName || '')}"`;
+    // Build QR button data attributes - store the computed URL directly
+    const qrDataAttrs = canReply
+      ? `data-url="${escapeText(replyDeeplinkUrl)}" data-target="${escapeText(username ? `@${username}` : (displayName || 'Anonymous'))}"`
+      : '';
 
     const el = document.createElement('div');
     el.className = 'post';
@@ -784,8 +779,8 @@ function renderPosts(posts) {
       ${renderMedia(p.media)}
       <div class="content" data-full="${escapeText(full)}" data-snippet="${escapeText(snippet)}">${escapeText(snippet)}</div>
       <div class="actions">
-        ${replyDeeplinkUrl ? `<a class="btn reply-btn" href="${replyDeeplinkUrl}">Reply (in app)</a>` : ''}
-        ${isDesktop ? `<button class="btn btn-qr" ${qrDataAttrs}>Scan QR</button>` : ''}
+        ${canReply ? `<a class="btn reply-btn" href="${replyDeeplinkUrl}">Reply (in app)</a>` : ''}
+        ${isDesktop && canReply ? `<button class="btn btn-qr" ${qrDataAttrs}>Scan QR</button>` : ''}
         ${hasMore && !hasMedia ? '<button class="btn toggle">Show full</button>' : ''}
         ${hasLocation ? `<button class="btn btn-map" data-h3="${escapeText(p.geolocatorH3)}" data-accuracy="${p.accuracyM || ''}">Show on map</button>` : ''}
       </div>
@@ -844,12 +839,11 @@ function renderPosts(posts) {
     const qrBtn = el.querySelector('.btn-qr');
     if (qrBtn) {
       qrBtn.addEventListener('click', async () => {
-        const qrUsername = qrBtn.dataset.username || null;
-        const qrMessageId = qrBtn.dataset.messageid;
-        const qrHandle = qrBtn.dataset.handle || null;
-        const qrEntropy = qrBtn.dataset.entropy || null;
-        const qrDisplayName = qrBtn.dataset.displayname || null;
-        await showQRModal(qrUsername, qrMessageId, qrHandle, qrEntropy, qrDisplayName);
+        const url = qrBtn.dataset.url;
+        const target = qrBtn.dataset.target;
+        if (url) {
+          await showQRModal(url, target);
+        }
       });
     }
 

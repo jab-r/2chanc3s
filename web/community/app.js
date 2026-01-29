@@ -602,25 +602,14 @@ const qrModalTarget = qrModal?.querySelector('.qr-modal-target');
  * @param {string|null} replyLinkEntropy - Identity link entropy (for anonymous posts)
  * @param {string|null} displayName - Display name for anonymous posts
  */
-async function showQRModal(username, messageId, replyLinkHandle = null, replyLinkEntropy = null, displayName = null) {
+async function showQRModal(url, targetText) {
   if (!qrModal || !qrModalImg) {
     console.error('[QRModal] Modal elements not found');
     return;
   }
 
-  let url;
-  let targetText;
-
-  if (replyLinkHandle && replyLinkEntropy) {
-    // Identity link (anonymous post)
-    url = getIdentityLinkQRUrl(replyLinkEntropy, replyLinkHandle);
-    targetText = displayName || 'Anonymous';
-  } else if (username) {
-    // Username-based reply
-    url = `loxation://reply?username=${encodeURIComponent(username)}&messageId=${encodeURIComponent(messageId)}`;
-    targetText = `@${username}`;
-  } else {
-    console.error('[QRModal] No username or identity link provided');
+  if (!url) {
+    console.error('[QRModal] No URL provided');
     return;
   }
 
@@ -768,10 +757,11 @@ function renderPosts(posts) {
     const hasMedia = p.media && (p.media.type === 'image' || p.media.type === 'video' || p.media.type === 'live');
     const hasLocation = p.geolocatorH3;
 
-    // Build QR button data attributes
-    const qrDataAttrs = username
-      ? `data-username="${escapeText(username)}" data-messageid="${escapeText(messageId)}"`
-      : `data-messageid="${escapeText(messageId)}" data-handle="${escapeText(replyLinkHandle || '')}" data-entropy="${escapeText(replyLinkEntropy || '')}" data-displayname="${escapeText(displayName || '')}"`;
+    // Build QR button data attributes - store the computed URL directly
+    const canReply = !!(replyDeeplinkUrl);
+    const qrDataAttrs = canReply
+      ? `data-url="${escapeText(replyDeeplinkUrl)}" data-target="${escapeText(username ? `@${username}` : (displayName || 'Anonymous'))}"`
+      : '';
 
     const el = document.createElement('div');
     el.className = 'post';
@@ -844,12 +834,11 @@ function renderPosts(posts) {
     const qrBtn = el.querySelector('.btn-qr');
     if (qrBtn) {
       qrBtn.addEventListener('click', async () => {
-        const qrUsername = qrBtn.dataset.username || null;
-        const qrMessageId = qrBtn.dataset.messageid;
-        const qrHandle = qrBtn.dataset.handle || null;
-        const qrEntropy = qrBtn.dataset.entropy || null;
-        const qrDisplayName = qrBtn.dataset.displayname || null;
-        await showQRModal(qrUsername, qrMessageId, qrHandle, qrEntropy, qrDisplayName);
+        const url = qrBtn.dataset.url;
+        const target = qrBtn.dataset.target;
+        if (url) {
+          await showQRModal(url, target);
+        }
       });
     }
 
