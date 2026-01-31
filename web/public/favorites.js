@@ -2,6 +2,7 @@
  * Favorites page JavaScript
  * Manages favorite users in localStorage and displays their posts
  */
+import QRCode from 'qrcode';
 
 // Constants
 const API_BASE = '';
@@ -25,7 +26,10 @@ const isIOSSafari = isIOS && /Safari/i.test(ua) && !/CriOS|FxiOS|OPiOS|EdgiOS|Br
 // Any iOS browser that's NOT Safari needs custom scheme fallback
 const isIOSNotSafari = isIOS && !isIOSSafari;
 
-console.log('[Platform]', { isIOS, isAndroid, isIOSSafari, isIOSNotSafari });
+// Desktop: anything that's not iOS or Android
+const isDesktop = !isIOS && !isAndroid;
+
+console.log('[Platform]', { isIOS, isAndroid, isIOSSafari, isIOSNotSafari, isDesktop });
 
 // ============================================================
 // localStorage Functions
@@ -170,6 +174,55 @@ function openAppWithFallback(customSchemeUrl, fallbackWebUrl) {
 
 // Make handleReplyClick available globally
 window.handleReplyClick = handleReplyClick;
+
+// ====== QR CODE MODAL (Desktop only) ======
+const qrModal = document.getElementById('qr-modal');
+const qrModalImg = document.getElementById('qr-modal-img');
+const qrModalTarget = qrModal?.querySelector('.qr-modal-target');
+
+/**
+ * Generate QR code data URL
+ */
+async function generateQRCodeDataUrl(url) {
+  try {
+    return await QRCode.toDataURL(url, {
+      width: 180,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: { dark: '#1a1a1a', light: '#fffdf7' }
+    });
+  } catch (err) {
+    console.error('[QR] Error generating QR code:', err);
+    return null;
+  }
+}
+
+/**
+ * Show QR modal with reply link
+ */
+async function showQRModal(url, targetDisplay) {
+  if (!qrModal || !qrModalImg) return;
+  const dataUrl = await generateQRCodeDataUrl(url);
+  if (!dataUrl) return;
+  qrModalImg.src = dataUrl;
+  if (qrModalTarget) {
+    qrModalTarget.textContent = targetDisplay || '';
+  }
+  qrModal.classList.remove('hidden');
+}
+
+// Close QR modal on click outside or close button
+if (qrModal) {
+  qrModal.addEventListener('click', (e) => {
+    if (e.target === qrModal) {
+      qrModal.classList.add('hidden');
+    }
+  });
+  const closeBtn = qrModal.querySelector('.qr-modal-close');
+  if (closeBtn) {
+    closeBtn.addEventListener('click', () => qrModal.classList.add('hidden'));
+  }
+}
 
 // ============================================================
 // Media Rendering
@@ -508,14 +561,28 @@ function renderPosts(posts, username) {
       ${renderMedia(p.media)}
       <div class="content" data-full="${escapeText(full)}" data-snippet="${escapeText(snippet)}">${escapeText(snippet)}</div>
       <div class="actions">
-        <a class="btn reply-btn" href="${getReplyUrl(pUsername, messageId)}"
-           data-username="${escapeText(pUsername)}"
-           data-messageid="${escapeText(messageId)}"
-           onclick="return window.handleReplyClick(event, this.dataset.username, this.dataset.messageid)">Reply (in app)</a>
+        ${isDesktop
+          ? `<button class="btn btn-qr" data-url="${replyUrlCustomScheme(pUsername, messageId)}" data-target="@${escapeText(pUsername)}">Scan QR to reply in-app</button>`
+          : `<a class="btn reply-btn" href="${getReplyUrl(pUsername, messageId)}"
+               data-username="${escapeText(pUsername)}"
+               data-messageid="${escapeText(messageId)}"
+               onclick="return window.handleReplyClick(event, this.dataset.username, this.dataset.messageid)">Reply (in app)</a>`}
         ${hasMore && !hasMedia ? '<button class="btn toggle">Show full</button>' : ''}
       </div>
     `;
-    
+
+    // QR button for desktop
+    const qrBtn = el.querySelector('.btn-qr');
+    if (qrBtn) {
+      qrBtn.addEventListener('click', async () => {
+        const url = qrBtn.dataset.url;
+        const target = qrBtn.dataset.target;
+        if (url) {
+          await showQRModal(url, target);
+        }
+      });
+    }
+
     // Toggle button for text content
     const toggle = el.querySelector('button.toggle');
     if (toggle) {

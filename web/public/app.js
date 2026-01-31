@@ -779,8 +779,7 @@ function renderPosts(posts) {
       ${renderMedia(p.media)}
       <div class="content" data-full="${escapeText(full)}" data-snippet="${escapeText(snippet)}">${escapeText(snippet)}</div>
       <div class="actions">
-        ${canReply ? `<a class="btn reply-btn" href="${replyDeeplinkUrl}">Reply (in app)</a>` : ''}
-        ${isDesktop && canReply ? `<button class="btn btn-qr" ${qrDataAttrs}>Scan QR</button>` : ''}
+        ${canReply ? (isDesktop ? `<button class="btn btn-qr" ${qrDataAttrs}>Scan QR to reply in-app</button>` : `<a class="btn reply-btn" href="${replyDeeplinkUrl}">Reply (in app)</a>`) : ''}
         ${hasMore && !hasMedia ? '<button class="btn toggle">Show full</button>' : ''}
         ${hasLocation ? `<button class="btn btn-map" data-h3="${escapeText(p.geolocatorH3)}" data-accuracy="${p.accuracyM || ''}">Show on map</button>` : ''}
       </div>
