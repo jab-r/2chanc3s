@@ -17,6 +17,26 @@ export type PostDoc = {
   replyLinkHandle?: string | null;   // UUID for identity link server lookup
   replyLinkEntropy?: string | null;  // base64url-encoded entropy for client-side decryption
   displayName?: string | null;       // Display name for anonymous posts (e.g., "Anonymous")
+  // Parsed entities for querying
+  entities?: {
+    mentions: string[];   // Case-sensitive usernames
+    hashtags: string[];   // Lowercase tags
+    urls: string[];
+  };
+};
+
+// Search request body for POST /api/search
+export type SearchRequest = {
+  hashtags?: string[];      // Lowercase hashtag values
+  mentions?: string[];      // Case-sensitive mention values
+  text?: string;            // Plain text substring search
+  location?: {
+    name?: string;          // For logging/debugging
+    h3Cells: string[];      // H3 cell IDs to search within
+    resolution: number;     // H3 resolution (6 or 7)
+  };
+  limit?: number;           // 1-100, default 50
+  maxScan?: number;         // 50-2000, default 500
 };
 
 export type MediaInfo = {

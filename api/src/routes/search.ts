@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { getDb } from "../firestore.js";
-import type { PostDoc, PublicPost, MediaInfo } from "../types.js";
+import type { PostDoc, PublicPost, MediaInfo, SearchRequest } from "../types.js";
 import { asyncHandler } from "../util/http.js";
 import { clampInt, parseH3List } from "../util/h3.js";
 
@@ -297,6 +297,245 @@ export function buildSearchRouter(): Router {
       const mediaMap = await resolveMediaUrls(mediaIds);
 
       // Convert to PublicPost with media info
+      const matches: PublicPost[] = [];
+      for (const doc of matchedDocs) {
+        const mediaInfo = doc.mediaId ? mediaMap.get(doc.mediaId) : undefined;
+        const pub = toPublicPost(doc, mediaInfo);
+        if (pub) matches.push(pub);
+      }
+
+      res.setHeader("Cache-Control", "public, max-age=10");
+      return res.status(200).json({ posts: matches });
+    })
+  );
+
+  /**
+   * POST /api/search
+   *
+   * Structured search with parsed query entities.
+   * Body: SearchRequest { hashtags?, mentions?, text?, location?, limit?, maxScan? }
+   */
+  router.post(
+    "/search",
+    asyncHandler(async (req, res) => {
+      const body = req.body as SearchRequest;
+
+      const hashtags = Array.isArray(body.hashtags) ? body.hashtags.filter(h => typeof h === 'string' && h.length > 0) : [];
+      const mentions = Array.isArray(body.mentions) ? body.mentions.filter(m => typeof m === 'string' && m.length > 0) : [];
+      const text = typeof body.text === 'string' ? body.text.trim().toLowerCase() : null;
+      const location = body.location?.h3Cells?.length ? body.location : null;
+
+      const limit = clampInt(body.limit, 50, 1, 100);
+      const maxScan = clampInt(body.maxScan, 500, 50, 2000);
+
+      // Must have at least one filter
+      if (hashtags.length === 0 && mentions.length === 0 && !text && !location) {
+        return res.status(400).json({
+          error: { code: "invalid_request", message: "At least one search filter required (hashtags, mentions, text, or location)" }
+        });
+      }
+
+      const db = getDb();
+      const hasHashtag = hashtags.length > 0;
+      const hasMention = mentions.length > 0;
+      const hasLocation = location !== null;
+      const hasText = text !== null && text.length >= 2;
+
+      let candidates: PostDoc[] = [];
+      const inMemoryFilters: ((doc: PostDoc) => boolean)[] = [];
+
+      // Determine query strategy based on available filters
+      // Priority: hashtag (most selective) > mention > location > text scan
+
+      if (hasHashtag && hasLocation) {
+        // Use composite query: hashtags array-contains + h3 == (per cell)
+        const h3Field = getH3Field(location.resolution);
+        const h3FieldKey = location.resolution === 6 ? 'h3_res6' : 'h3_res7';
+        const primaryHashtag = hashtags[0].toLowerCase();
+        const perCellLimit = Math.ceil(maxScan / Math.min(location.h3Cells.length, 50));
+
+        // Query each H3 cell separately (array-contains + == is allowed, but array-contains + in is NOT)
+        const cellPromises = location.h3Cells.slice(0, 50).map(cell =>
+          db.collection(POSTS_COLLECTION)
+            .where('entities.hashtags', 'array-contains', primaryHashtag)
+            .where(h3Field, '==', cell)
+            .orderBy('time', 'desc')
+            .limit(perCellLimit)
+            .get()
+            .catch(err => {
+              console.error(`[search POST] hashtag+h3 query error:`, err);
+              return { docs: [] };
+            })
+        );
+
+        const snaps = await Promise.all(cellPromises);
+        for (const snap of snaps) {
+          for (const doc of snap.docs) {
+            candidates.push(doc.data() as PostDoc);
+          }
+        }
+
+        // Filter additional hashtags in memory
+        if (hashtags.length > 1) {
+          const extraHashtags = hashtags.slice(1).map(h => h.toLowerCase());
+          inMemoryFilters.push(doc =>
+            extraHashtags.every(h => doc.entities?.hashtags?.includes(h))
+          );
+        }
+
+        // Filter mentions in memory
+        if (hasMention) {
+          inMemoryFilters.push(doc =>
+            mentions.every(m => doc.entities?.mentions?.includes(m))
+          );
+        }
+
+      } else if (hasHashtag) {
+        // Query by first hashtag
+        const primaryHashtag = hashtags[0].toLowerCase();
+        const snap = await db.collection(POSTS_COLLECTION)
+          .where('entities.hashtags', 'array-contains', primaryHashtag)
+          .orderBy('time', 'desc')
+          .limit(maxScan)
+          .get();
+        candidates = snap.docs.map(d => d.data() as PostDoc);
+
+        // Filter additional hashtags in memory
+        if (hashtags.length > 1) {
+          const extraHashtags = hashtags.slice(1).map(h => h.toLowerCase());
+          inMemoryFilters.push(doc =>
+            extraHashtags.every(h => doc.entities?.hashtags?.includes(h))
+          );
+        }
+
+        // Filter mentions in memory
+        if (hasMention) {
+          inMemoryFilters.push(doc =>
+            mentions.every(m => doc.entities?.mentions?.includes(m))
+          );
+        }
+
+        // Filter location in memory
+        if (hasLocation) {
+          const h3Set = new Set(location.h3Cells);
+          const h3FieldKey = location.resolution === 6 ? 'h3_res6' : 'h3_res7';
+          inMemoryFilters.push(doc => {
+            const docH3 = doc.geolocator?.[h3FieldKey];
+            return docH3 ? h3Set.has(docH3) : false;
+          });
+        }
+
+      } else if (hasMention) {
+        // Query by first mention (case-sensitive)
+        const primaryMention = mentions[0];
+        const snap = await db.collection(POSTS_COLLECTION)
+          .where('entities.mentions', 'array-contains', primaryMention)
+          .orderBy('time', 'desc')
+          .limit(maxScan)
+          .get();
+        candidates = snap.docs.map(d => d.data() as PostDoc);
+
+        // Filter additional mentions in memory
+        if (mentions.length > 1) {
+          const extraMentions = mentions.slice(1);
+          inMemoryFilters.push(doc =>
+            extraMentions.every(m => doc.entities?.mentions?.includes(m))
+          );
+        }
+
+        // Filter location in memory
+        if (hasLocation) {
+          const h3Set = new Set(location.h3Cells);
+          const h3FieldKey = location.resolution === 6 ? 'h3_res6' : 'h3_res7';
+          inMemoryFilters.push(doc => {
+            const docH3 = doc.geolocator?.[h3FieldKey];
+            return docH3 ? h3Set.has(docH3) : false;
+          });
+        }
+
+      } else if (hasLocation) {
+        // Location-only query - use existing H3 query pattern
+        const h3Field = getH3Field(location.resolution);
+        const chunks: string[][] = [];
+        for (let i = 0; i < location.h3Cells.length; i += 10) {
+          chunks.push(location.h3Cells.slice(i, i + 10));
+        }
+
+        const docs: PostDoc[] = [];
+        const concurrency = 5;
+        for (let i = 0; i < chunks.slice(0, 20).length; i += concurrency) {
+          const batch = chunks.slice(i, i + concurrency);
+          try {
+            const snaps = await Promise.all(
+              batch.map(chunk =>
+                db.collection(POSTS_COLLECTION)
+                  .where(h3Field, 'in', chunk)
+                  .orderBy('time', 'desc')
+                  .limit(Math.ceil(maxScan / chunks.length))
+                  .get()
+              )
+            );
+            for (const snap of snaps) {
+              for (const doc of snap.docs) {
+                docs.push(doc.data() as PostDoc);
+              }
+            }
+          } catch (err) {
+            console.error(`[search POST] location query error:`, err);
+          }
+        }
+        candidates = docs;
+
+      } else {
+        // Text-only search - scan recent posts
+        const snap = await db.collection(POSTS_COLLECTION)
+          .orderBy('time', 'desc')
+          .limit(maxScan)
+          .get();
+        candidates = snap.docs.map(d => d.data() as PostDoc);
+      }
+
+      // Always apply text filter if present
+      if (hasText) {
+        inMemoryFilters.push(doc => {
+          const hay = `${doc.username || ''} ${doc.content}`.toLowerCase();
+          return hay.includes(text);
+        });
+      }
+
+      // Apply in-memory filters
+      let results = candidates;
+      for (const filter of inMemoryFilters) {
+        results = results.filter(filter);
+      }
+
+      // Sort by time descending and deduplicate
+      results.sort((a, b) => (b.time || '').localeCompare(a.time || ''));
+
+      const seen = new Set<string>();
+      const matchedDocs: PostDoc[] = [];
+      for (const doc of results) {
+        const username = typeof doc.username === 'string' ? doc.username.trim() : '';
+        const hasIdentityLink = doc.replyLinkHandle && doc.replyLinkEntropy;
+        if (!username && !hasIdentityLink) continue;
+        if (typeof doc.messageId !== 'string' || !doc.messageId.trim()) continue;
+        if (typeof doc.time !== 'string' || !doc.time.trim()) continue;
+        if (typeof doc.content !== 'string') continue;
+
+        const key = `${username || doc.replyLinkHandle}:${doc.messageId}:${doc.time}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        matchedDocs.push(doc);
+        if (matchedDocs.length >= limit) break;
+      }
+
+      // Resolve media URLs
+      const mediaIds = matchedDocs
+        .filter(doc => doc.mediaId)
+        .map(doc => doc.mediaId as string);
+      const mediaMap = await resolveMediaUrls(mediaIds);
+
+      // Convert to PublicPost
       const matches: PublicPost[] = [];
       for (const doc of matchedDocs) {
         const mediaInfo = doc.mediaId ? mediaMap.get(doc.mediaId) : undefined;
