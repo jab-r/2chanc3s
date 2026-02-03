@@ -1,5 +1,6 @@
 import { latLngToCell, gridDisk, cellToBoundary, cellToLatLng } from 'h3-js';
 import QRCode from 'qrcode';
+import { parseSearchQuery, hasSearchFilters } from './searchParser.js';
 
 // Configure this to your Cloud Run URL, e.g. https://api-xxxxx-uc.a.run.app
 // If your Cloudflare Pages site proxies to the API, this can remain "".
@@ -1095,26 +1096,95 @@ async function runSearch() {
     setStatus('Search needs at least 2 characters.');
     return;
   }
-  if (!lastH3) {
-    setStatus('Set a location first (search is nearby by default).');
+
+  // Parse the search query
+  const parsed = parseSearchQuery(q);
+
+  // Check if we have any searchable filters
+  if (!hasSearchFilters(parsed.entities)) {
+    setStatus('Search needs at least 2 characters of text or a valid filter.');
     return;
   }
-  setStatus('Searching…');
+
+  setStatus('Parsing search…');
   const limit = Number(limitEl.value);
-  
-  // Use new multi-resolution API
-  const params = {
-    q,
-    h3: lastH3.cells.join(','),
-    resolution: lastH3.resolution,
+
+  // Build the structured search request
+  const searchRequest = {
     limit,
     maxScan: 500
   };
-  
+
+  // Add hashtags if present
+  if (parsed.entities.hashtags.length > 0) {
+    searchRequest.hashtags = parsed.entities.hashtags;
+  }
+
+  // Add mentions if present
+  if (parsed.entities.mentions.length > 0) {
+    searchRequest.mentions = parsed.entities.mentions;
+  }
+
+  // Add text if present
+  if (parsed.entities.text) {
+    searchRequest.text = parsed.entities.text;
+  }
+
+  // Handle location from query (📍) or use current location context
+  if (parsed.entities.locations.length > 0) {
+    const locationName = parsed.entities.locations[0].name;
+    setStatus(`Geocoding "${locationName}"…`);
+
+    try {
+      const geo = await geocodeAddress(locationName);
+      const resolution = 7;
+      const centerCell = latLngToCell(geo.latitude, geo.longitude, resolution);
+      const cells = Array.from(gridDisk(centerCell, 2));
+
+      searchRequest.location = {
+        name: locationName,
+        h3Cells: cells,
+        resolution
+      };
+    } catch (err) {
+      setStatus(`Could not find location: ${locationName}`);
+      return;
+    }
+  } else if (lastH3) {
+    // Use current location context if no explicit location
+    searchRequest.location = {
+      name: 'current',
+      h3Cells: lastH3.cells,
+      resolution: lastH3.resolution
+    };
+  }
+
+  setStatus('Searching…');
+
   try {
-    const data = await apiGet('/api/search', params);
+    const response = await fetch(`${API_BASE}/api/search`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(searchRequest)
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.error?.message || `HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
     renderPosts(data.posts);
-    setStatus(`Search returned ${data.posts.length} posts.`);
+
+    // Build status message showing what filters were applied
+    const filters = [];
+    if (searchRequest.hashtags?.length) filters.push(`#${searchRequest.hashtags.join(' #')}`);
+    if (searchRequest.mentions?.length) filters.push(`@${searchRequest.mentions.join(' @')}`);
+    if (parsed.entities.locations.length) filters.push(`📍${parsed.entities.locations[0].name}`);
+    if (searchRequest.text) filters.push(`"${searchRequest.text}"`);
+
+    const filterDesc = filters.length ? ` (${filters.join(', ')})` : '';
+    setStatus(`Found ${data.posts.length} posts${filterDesc}`);
   } catch (e) {
     setStatus(`Error: ${e.message}`);
   }

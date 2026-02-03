@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Guide - 2chanc3s</title>
+  <link rel="stylesheet" href="/style.css" />
+  <style>
+    .guide {
+      max-width: 700px;
+      margin: 0 auto;
+      padding: 1rem;
+    }
+    .guide h1 {
+      border-bottom: 2px solid #333;
+      padding-bottom: 0.5rem;
+    }
+    .guide h2 {
+      margin-top: 2rem;
+      color: #444;
+    }
+    .guide h3 {
+      margin-top: 1.5rem;
+      color: #555;
+    }
+    .guide code {
+      background: #f0f0f0;
+      padding: 0.15rem 0.4rem;
+      border-radius: 3px;
+      font-size: 0.95em;
+    }
+    .guide pre {
+      background: #f5f5f5;
+      padding: 1rem;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+    .guide pre code {
+      background: none;
+      padding: 0;
+    }
+    .guide table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1rem 0;
+    }
+    .guide th, .guide td {
+      border: 1px solid #ddd;
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+    }
+    .guide th {
+      background: #f5f5f5;
+    }
+    .guide .example {
+      background: #e8f4e8;
+      border-left: 4px solid #4a4;
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+    }
+    .guide .tip {
+      background: #e8f0f8;
+      border-left: 4px solid #48c;
+      padding: 0.75rem 1rem;
+      margin: 1rem 0;
+    }
+    .guide ul {
+      padding-left: 1.5rem;
+    }
+    .guide li {
+      margin: 0.5rem 0;
+    }
+    .back-link {
+      display: inline-block;
+      margin-bottom: 1rem;
+      color: #666;
+    }
+  </style>
+</head>
+<body>
+  <header class="top">
+    <a href="/" class="back-link">&larr; Back to Feed</a>
+  </header>
+
+  <main class="guide">
+    <h1>How to Use 2chanc3s</h1>
+    <p>2chanc3s is a location-based platform for posting and discovering messages in your area. This guide covers the main features.</p>
+
+    <h2>Setting Your Location</h2>
+    <p>Before browsing or searching, you need to set a location. There are two ways:</p>
+
+    <h3>Option 1: GPS (Use My Location)</h3>
+    <p>Click the <strong>"Use My Location"</strong> button to use your device's GPS.</p>
+    <ul>
+      <li>Your browser will ask for permission to access location</li>
+      <li>Works best on mobile devices</li>
+      <li>Accuracy varies (shown as ± meters)</li>
+    </ul>
+    <div class="tip">
+      <strong>Tip:</strong> GPS is more accurate outdoors. If you're inside, you might get better results using an address.
+    </div>
+
+    <h3>Option 2: Enter an Address</h3>
+    <p>Type an address, city, or landmark in the address field and click <strong>"Go"</strong>.</p>
+    <ul>
+      <li>Works anywhere - no GPS needed</li>
+      <li>Great for exploring other areas</li>
+      <li>Examples: "Boston, MA", "Findlay Market", "123 Main St"</li>
+    </ul>
+
+    <h3>Adjusting the Radius</h3>
+    <p>Use the <strong>"k"</strong> slider to control how far you want to see:</p>
+    <table>
+      <tr><th>k value</th><th>Approximate area</th></tr>
+      <tr><td>1-3</td><td>Immediate neighborhood</td></tr>
+      <tr><td>4-7</td><td>District / several miles</td></tr>
+      <tr><td>8-15</td><td>Metro area / city-wide</td></tr>
+    </table>
+
+    <h2>Searching Posts</h2>
+    <p>The search field supports several special tokens to filter posts:</p>
+
+    <table>
+      <tr><th>Token</th><th>Example</th><th>What it does</th></tr>
+      <tr><td><code>#hashtag</code></td><td><code>#food</code></td><td>Find posts with this hashtag</td></tr>
+      <tr><td><code>@username</code></td><td><code>@jon</code></td><td>Find posts mentioning this user</td></tr>
+      <tr><td><code>📍location</code></td><td><code>📍Boston</code></td><td>Search in a specific location</td></tr>
+      <tr><td>plain text</td><td><code>coffee</code></td><td>Search post content</td></tr>
+    </table>
+
+    <h3>Hashtag Search</h3>
+    <p>Prefix with <code>#</code> to search by hashtag:</p>
+    <div class="example">
+      <code>#food</code> - Find all posts tagged with #food<br>
+      <code>#outdoors #hiking</code> - Find posts with both hashtags
+    </div>
+    <p>Hashtags are case-insensitive: <code>#Food</code> and <code>#food</code> find the same posts.</p>
+
+    <h3>Mention Search</h3>
+    <p>Prefix with <code>@</code> to find posts mentioning a user:</p>
+    <div class="example">
+      <code>@jon</code> - Find posts that mention @jon
+    </div>
+    <p>Mentions are case-sensitive: <code>@Jon</code> and <code>@jon</code> are different.</p>
+
+    <h3>Location Search</h3>
+    <p>Use <code>📍</code> followed by a place name to search a specific area:</p>
+    <div class="example">
+      <code>📍Cincinnati</code> - Search posts near Cincinnati<br>
+      <code>📍"Findlay Market"</code> - Use quotes for multi-word places<br>
+      <code>#food 📍NYC</code> - Food posts in New York City
+    </div>
+    <div class="tip">
+      <strong>Tip:</strong> The 📍 location in your search overrides your current location setting. This lets you explore other areas without changing your main location.
+    </div>
+
+    <h3>Combined Searches</h3>
+    <p>Combine multiple tokens for precise results:</p>
+    <div class="example">
+      <code>#coffee 📍Boston</code> - Coffee posts in Boston<br>
+      <code>@alice #hiking</code> - Posts mentioning @alice with #hiking<br>
+      <code>📍"Central Park" dogs</code> - Posts near Central Park containing "dogs"
+    </div>
+
+    <h3>Text Search</h3>
+    <p>Any words without <code>#</code>, <code>@</code>, or <code>📍</code> are treated as content search:</p>
+    <div class="example">
+      <code>good morning</code> - Find posts containing "good morning"
+    </div>
+
+    <h2>Browsing the Feed</h2>
+    <p>After setting a location, posts from nearby will load automatically. The feed shows:</p>
+    <ul>
+      <li>Most recent posts first</li>
+      <li>Posts within your selected radius (k value)</li>
+      <li>Username, time, and content for each post</li>
+      <li>Images and videos if attached</li>
+    </ul>
+
+    <h3>Interacting with Posts</h3>
+    <ul>
+      <li><strong>Reply:</strong> Click "Reply" to open a direct message to the poster</li>
+      <li><strong>Map:</strong> Click "Map" to see the post's location</li>
+      <li><strong>QR Code:</strong> Some posts have QR codes for easy sharing</li>
+    </ul>
+
+    <h2>Tips</h2>
+    <ul>
+      <li>Use specific hashtags in your posts to make them easier to find</li>
+      <li>Mention other users with <code>@username</code> to get their attention</li>
+      <li>The more specific your location, the better your results</li>
+      <li>Adjust the <strong>limit</strong> slider to see more or fewer posts at once</li>
+    </ul>
+
+    <hr style="margin-top: 2rem;">
+    <p style="color: #888; font-size: 0.9em;">
+      <a href="/">&larr; Back to Feed</a>
+    </p>
+  </main>
+</body>
+</html>
