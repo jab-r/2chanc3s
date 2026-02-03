@@ -37,10 +37,13 @@ app.use(
       if (config.corsAllowedOrigins.includes(origin)) return cb(null, true);
       return cb(new Error("CORS blocked"));
     },
-    methods: ["GET", "OPTIONS"],
+    methods: ["GET", "POST", "OPTIONS"],
     maxAge: 600
   })
 );
+
+// Parse JSON request bodies for POST endpoints
+app.use(express.json());
 
 app.use(
   "/api",

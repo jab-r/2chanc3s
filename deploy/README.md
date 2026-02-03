@@ -22,9 +22,8 @@ Goal:
 Run from repo root:
 
 ```bash
-gcloud run deploy chanc3s-api --source ./api --region us-central1 --allow-unauthenticated --set-env-vars "FIREBASE_PROJECT_ID=loxation-f8e1c,CORS_ALLOWED_ORIGINS=https://www.2chanc3s.com\,https://community.loxation.com,CORS_ALLOW_LOCALHOST=false"
+gcloud run deploy chanc3s-api --source ./api --region us-central1 --allow-unauthenticated --set-env-vars '^@^FIREBASE_PROJECT_ID=loxation-f8e1c@CORS_ALLOWED_ORIGINS=https://www.2chanc3s.com,https://community.loxation.com@CORS_ALLOW_LOCALHOST=false'
 ```
-
 Note: The comma in `CORS_ALLOWED_ORIGINS` is escaped (`\,`) to prevent gcloud from interpreting it as a separator between env vars.
 
 Notes:
